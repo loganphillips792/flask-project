@@ -7,40 +7,11 @@ global:
   # Set the interval at which rules are evaluated (15 seconds)
   evaluation_interval: 15s
 
-# Alerting configuration for Prometheus
-alerting:
-  alertmanagers:
-    # Configure Alertmanager with HTTP settings
-  - follow_redirects: true
-    enable_http2: true
-    scheme: http
-    timeout: 10s
-    api_version: v2
-    # Configure static targets for Alertmanager
-    static_configs:
-    - targets: []
-
 # Scrape configurations for Prometheus, defining jobs and their settings
 scrape_configs:
-  # Job configuration for 'scan-orchestrator'
-  - job_name: 'scan-orchestrator'
-    # Set the interval at which Prometheus scrapes targets for this job (10 seconds)
-    scrape_interval: 10s
-    # Set the metrics path for this job
-    metrics_path: /metrics
-    # Define static targets for this job
-    static_configs:
-      - targets: ['scan-orchestrator:8081']
-
-  # Job configuration for 'api-gateway'
-  - job_name: 'api-gateway'
+  # The Flask app serves /metrics on its own port via prometheus-flask-exporter.
+  - job_name: 'flask-app'
     scrape_interval: 10s
     metrics_path: /metrics
     static_configs:
-      - targets: ['api-gateway:8080']
-
-  - job_name: 'postgres-exporter'
-    scrape_interval: 15s
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['postgres-exporter:9187']
+      - targets: ['flask-app:5001']

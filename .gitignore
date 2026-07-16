@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+
+library.db
+library.db-wal
+library.db-shm
+container-library.db
+
+venv/
+.venv/
+.env
+
+observability/grafana-storage/
+observability/tempo-data/
+
+.DS_Store

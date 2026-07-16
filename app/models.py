@@ -15,6 +15,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.database import db
 
 
+LOAN_PERIOD_DAYS = 14
+
+
+def _default_due_date():
+    return datetime.date.today() + datetime.timedelta(days=LOAN_PERIOD_DAYS)
+
+
 class BaseModel(Model):
     class Meta:
         database = db
@@ -65,7 +72,7 @@ class Loan(BaseModel):
     user = ForeignKeyField(User, backref="loans")
     book = ForeignKeyField(Book, backref="loans")
     loaned_at = DateTimeField(default=datetime.datetime.now)
-    due_date = DateField()
+    due_date = DateField(default=_default_due_date)
     returned = BooleanField(default=False)
 
     def to_dict(self):

@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+library.db
+library.db-wal
+library.db-shm
+venv/
+.venv/
+.env
+observability/
+compose.yaml
+.DS_Store
+README.md

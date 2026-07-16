@@ -1,52 +1,64 @@
+name: flask-observability
+
 services:
+  flask-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - '5001:5001'
+    environment:
+      - SECRET_KEY=dev-secret-change-me
+      - LIBRARY_DB_PATH=/data/library.db
+      - OTEL_SERVICE_NAME=flask-app
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - LOG_LEVEL=INFO
+      # Seeds demo users and books before gunicorn starts, so the stack comes up
+      # with a working demo login instead of empty tables.
+      - SEED_DB=1
+    volumes:
+      # Named volume, not a bind mount: SQLite WAL mode needs an mmap'd -shm
+      # file, which is unreliable over Docker Desktop's filesystem sharing.
+      - library-data:/data
+    depends_on:
+      - tempo
+    networks:
+      - library-network
+
   prometheus:
     image: prom/prometheus:latest
-    container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      # Tempo's metrics_generator remote-writes span metrics here.
       - '--web.enable-remote-write-receiver'
       - '--enable-feature=exemplar-storage'
       - '--enable-feature=native-histograms'
     ports:
       - '9090:9090'
     networks:
-      - securescan-network
+      - library-network
 
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
     depends_on:
       - prometheus
       - tempo
     ports:
       - '3001:3000'
     volumes:
-      - ./grafana-storage:/var/lib/grafana
+      - grafana-storage:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=secretpassword
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary
     networks:
-      - securescan-network
-
-  postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:latest
-    container_name: postgres-exporter
-    environment:
-      DATA_SOURCE_NAME: "postgresql://user:password@postgres:5432/scans_db?sslmode=disable"
-    command:
-      - --collector.stat_statements
-    ports:
-      - "9187:9187"
-    networks:
-      - securescan-network
+      - library-network
 
   loki:
     image: grafana/loki:3.4.2
-    container_name: loki
     user: root
     ports:
       - "3100:3100"
@@ -56,11 +68,10 @@ services:
       - loki-data:/loki
       - loki-wal:/wal
     networks:
-      - securescan-network
+      - library-network
 
   promtail:
     image: grafana/promtail:3.0.0
-    container_name: promtail
     ports:
       - "9080:9080"
     volumes:
@@ -70,58 +81,31 @@ services:
       - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
     command: -config.file=/etc/promtail/config.yaml
     networks:
-      - securescan-network
+      - library-network
 
   tempo:
-    image: grafana/tempo:latest
-    container_name: tempo
-    depends_on:
-      - redpanda
-      - minio
+    image: grafana/tempo:2.7.1
     command: "-target=all -config.file=/etc/tempo.yaml"
     restart: always
     volumes:
-      - ./tempo.yaml:/etc/tempo.yaml
-      - ./tempo-data:/var/tempo
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      # Named volume: the image runs as uid 10001, so a bind-mounted dir would
+      # be created root-owned and Tempo would crash-loop unable to write blocks.
+      - tempo-data:/var/tempo
     ports:
       - "3200:3200"
       - "4317:4317"
       - "4318:4318"
     networks:
-      - securescan-network
-
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    environment:
-      - MINIO_ACCESS_KEY=tempo
-      - MINIO_SECRET_KEY=supersecret
-    ports:
-      - "9001:9001"
-    entrypoint:
-      - sh
-      - -euc
-      - mkdir -p /data/tempo && minio server /data --console-address ':9001'
-    networks:
-      - securescan-network
-
-  redpanda:
-    image: redpandadata/redpanda:latest
-    container_name: redpanda
-    ports:
-      - "9092:9092"
-    command: >
-      redpanda start --overprovisioned
-      --mode=dev-container
-      --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      --advertise-kafka-addr=PLAINTEXT://redpanda:9092
-    networks:
-      - securescan-network
+      - library-network
 
 volumes:
+  library-data:
+  grafana-storage:
   loki-data:
   loki-wal:
+  tempo-data:
 
 networks:
-  securescan-network:
+  library-network:
     driver: bridge

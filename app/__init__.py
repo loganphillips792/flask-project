@@ -11,7 +11,8 @@ def create_app():
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
     from app.auth import auth, login_manager
-    from app.routes import api
+    from app.observability import init_observability
+    from app.routes import api, health
     from app.session import PeeweeSessionInterface
 
     app.session_interface = PeeweeSessionInterface()
@@ -19,6 +20,11 @@ def create_app():
     login_manager.init_app(app)
     app.register_blueprint(api)
     app.register_blueprint(auth)
+    app.register_blueprint(health)
+
+    # After the blueprints: PrometheusMetrics labels by endpoint, so it needs
+    # to see the registered views.
+    init_observability(app)
 
     with db:
         db.create_tables(MODELS, safe=True)

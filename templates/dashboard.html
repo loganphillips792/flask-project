@@ -1,9 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-  <h1>Welcome, {{ current_user.name }}</h1>
-  <div class="field"><span>Email:</span> {{ current_user.email }}</div>
-  <div class="field"><span>User ID:</span> {{ current_user.id }}</div>
-  <div class="field"><span>Lucky number:</span> {{ lucky_number }}</div>
-  <p><a class="logout" href="{{ url_for('auth.logout') }}">Log out</a></p>
+  <div class="card">
+    <h1>Welcome, {{ current_user.name }}</h1>
+    <div class="field"><span>Email:</span> {{ current_user.email }}</div>
+    <div class="field"><span>User ID:</span> {{ current_user.id }}</div>
+    <div class="field"><span>Lucky number:</span> {{ lucky_number }}</div>
+    <p><a class="logout" href="{{ url_for('auth.logout') }}">Log out</a></p>
+  </div>
+
+  <div class="card">
+    <h1>Create a loan</h1>
+    {% if users and books %}
+      <form method="post" action="{{ url_for('auth.create_dashboard_loan') }}">
+        <label for="user_id">User</label>
+        <select id="user_id" name="user_id" required>
+          {% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+        </select>
+        <label for="book_id">Book</label>
+        <select id="book_id" name="book_id" required>
+          {% for b in books %}<option value="{{ b.id }}">{{ b.title }}</option>{% endfor %}
+        </select>
+        <button type="submit">Create loan</button>
+      </form>
+    {% else %}
+      <p>No users or books yet — run <code>flask --app run init-db</code> to seed test data.</p>
+    {% endif %}
+  </div>
 {% endblock %}
