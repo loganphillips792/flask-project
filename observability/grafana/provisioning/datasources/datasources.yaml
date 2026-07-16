@@ -13,19 +13,6 @@ datasources:
       httpMethod: POST
     isDefault: true # Optional: set as the default data source
 
-  - name: Postgres
-    type: postgres
-    uid: postgres_ds
-    access: proxy
-    url: postgres:5432
-    user: user
-    secureJsonData:
-      password: password
-    jsonData:
-      database: scans_db
-      sslmode: disable
-      postgresVersion: 1300
-
   - name: Loki
     type: loki
     uid: loki_ds # You can choose a unique ID
@@ -48,16 +35,18 @@ datasources:
         datasourceUid: 'prometheus_ds' # Prometheus datasource used for Service Graph
       nodeGraph:
         enabled: true # Enable the node graph visualization for Service Graph
-      tracesToLogs: # Link traces to logs in Loki
-        datasourceUid: 'loki_ds' # UID of your Loki datasource
-        tags: ['job', 'instance', 'pod', 'namespace']
-        mappedTags: [{ key: 'service.name', value: 'service' }]
-        mapTagNamesEnabled: false
-        spanStartTimeShift: '1h'
+      # V2 (the V1 tracesToLogs is deprecated). filterByTraceID matches on the
+      # trace_id field emitted by app/observability.py's JsonFormatter, and the
+      # tag maps the span's service.name onto Loki's service_name label — the
+      # V1 tags (job/instance/pod/namespace) matched none of our labels, so the
+      # trace-to-logs jump silently came back empty.
+      tracesToLogsV2:
+        datasourceUid: 'loki_ds'
+        tags: [{ key: 'service.name', value: 'service_name' }]
+        spanStartTimeShift: '-1h'
         spanEndTimeShift: '1h'
         filterByTraceID: true
         filterBySpanID: false
-        lokiSearch: true
       tracesToMetrics: # Link traces to metrics in Prometheus
         datasourceUid: 'prometheus_ds'
         tags: [{ key: 'service.name', value: 'service' }]

@@ -1,0 +1,7 @@
+# Lets `docker compose up --build` run from the repo root. `include` gives the
+# included file its own project directory, so the relative paths inside it
+# (./prometheus.yml, context: ..) still resolve against observability/.
+name: flask-observability
+
+include:
+  - observability/docker-compose.yml

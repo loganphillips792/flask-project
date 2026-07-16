@@ -1,12 +1,16 @@
-import datetime
-
 from flask import Blueprint, jsonify, request
 
 from app.models import Book, Loan, User
 
 api = Blueprint("api", __name__, url_prefix="/api")
+health = Blueprint("health", __name__)
 
-LOAN_PERIOD_DAYS = 14
+
+@health.get("/health")
+def healthcheck():
+    # Deliberately does not touch the database: a locked SQLite file should not
+    # cascade into a container restart loop.
+    return jsonify({"status": "ok"})
 
 
 @api.get("/loans")
@@ -45,9 +49,5 @@ def create_loan():
         if book is None:
             return jsonify({"error": "No books exist; run `flask --app run init-db` to seed test data"}), 400
 
-    loan = Loan.create(
-        user=user,
-        book=book,
-        due_date=datetime.date.today() + datetime.timedelta(days=LOAN_PERIOD_DAYS),
-    )
+    loan = Loan.create(user=user, book=book)
     return jsonify(loan.to_dict()), 201

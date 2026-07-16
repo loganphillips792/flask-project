@@ -15,6 +15,15 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 2rem 1rem;
+    }
+    /* Vertical stack so a page can render several cards, each its own box. */
+    .container {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
     }
     .card {
       background: #fff;
@@ -22,17 +31,17 @@
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
       padding: 2rem 2.25rem;
       width: 100%;
-      max-width: 380px;
     }
     h1 { margin: 0 0 1.25rem; font-size: 1.5rem; }
     label { display: block; font-size: 0.85rem; margin-bottom: 0.35rem; color: #555; }
-    input {
+    input, select {
       width: 100%;
       padding: 0.6rem 0.75rem;
       margin-bottom: 1rem;
       border: 1px solid #d0d3d9;
       border-radius: 8px;
       font-size: 1rem;
+      background: #fff;
     }
     button {
       width: 100%;
@@ -54,13 +63,24 @@
       font-size: 0.9rem;
       margin-bottom: 1rem;
     }
+    .success {
+      background: #e8f5e9;
+      color: #1b5e20;
+      padding: 0.6rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
     .field { margin: 0.5rem 0; }
     .field span { color: #555; }
     a.logout { color: #4f46e5; text-decoration: none; font-weight: 600; }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="container">
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      <div class="{{ category }}">{{ message }}</div>
+    {% endfor %}
     {% block content %}{% endblock %}
   </div>
 </body>

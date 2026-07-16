@@ -33,10 +33,13 @@ scrape_configs:
                   level: level
                   msg: msg
                   uri: uri
+            # Only `level` becomes a stream label. Promoting `msg` or `uri`
+            # would mint a new Loki stream per distinct message and per
+            # /api/loans/<id> path; both are unbounded, and Loki starts
+            # rejecting pushes once max streams per user is hit. They stay
+            # queryable at read time via `| json`.
             - labels:
                 level:
-                msg:
-                uri:
     relabel_configs:
       - source_labels: [__meta_docker_container_name]
         target_label: container
