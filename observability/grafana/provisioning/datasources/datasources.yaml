@@ -1,0 +1,72 @@
+# config file version
+apiVersion: 1
+
+# list of datasources to insert/update depending
+# on what's available in the database
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus_ds
+    access: proxy # or direct
+    url: http://prometheus:9090 # URL of your Prometheus service in Docker network
+    jsonData:
+      httpMethod: POST
+    isDefault: true # Optional: set as the default data source
+
+  - name: Postgres
+    type: postgres
+    uid: postgres_ds
+    access: proxy
+    url: postgres:5432
+    user: user
+    secureJsonData:
+      password: password
+    jsonData:
+      database: scans_db
+      sslmode: disable
+      postgresVersion: 1300
+
+  - name: Loki
+    type: loki
+    uid: loki_ds # You can choose a unique ID
+    access: proxy
+    url: http://loki:3100 # URL of your Loki service in Docker network
+    jsonData:
+      maxLines: 1000
+
+  - name: Tempo
+    type: tempo
+    uid: tempo_ds # Choose a unique ID
+    access: proxy
+    url: http://tempo:3200 # URL of your Tempo service in Docker network
+    jsonData:
+      httpMethod: GET
+      streamingEnabled:
+        search: true
+        metrics: true
+      serviceMap:
+        datasourceUid: 'prometheus_ds' # Prometheus datasource used for Service Graph
+      nodeGraph:
+        enabled: true # Enable the node graph visualization for Service Graph
+      tracesToLogs: # Link traces to logs in Loki
+        datasourceUid: 'loki_ds' # UID of your Loki datasource
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [{ key: 'service.name', value: 'service' }]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+        lokiSearch: true
+      tracesToMetrics: # Link traces to metrics in Prometheus
+        datasourceUid: 'prometheus_ds'
+        tags: [{ key: 'service.name', value: 'service' }]
+        queries:
+          - name: 'Request rate'
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))'
+          - name: 'Error rate'
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags,status_code="STATUS_CODE_ERROR"}[5m]))'
+          - name: 'Duration (p95)'
+            query: 'histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m])) by (le))'
+    version: 1
+    editable: true

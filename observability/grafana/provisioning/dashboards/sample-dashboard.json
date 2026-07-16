@@ -1,0 +1,20 @@
+{
+  "uid": "sample-dashboard-01",
+  "title": "Sample Provisioned Dashboard",
+  "tags": [ "provisioned" ],
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 0,
+  "refresh": "25s",
+  "panels": [
+    {
+      "title": "Welcome",
+      "type": "text",
+      "gridPos": { "h": 3, "w": 12, "x": 0, "y": 0 },
+      "options": {
+        "content": "# Welcome to your provisioned dashboard!\n\nThis dashboard is loaded from a JSON file.",
+        "mode": "markdown"
+      }
+    }
+  ]
+}
