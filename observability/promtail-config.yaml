@@ -1,0 +1,50 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: system
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: varlogs
+          __path__: /var/log/*.log
+
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+#        filters:
+#          - name: label
+#            # only containers with this label; omit to grab all
+#            values: ['prometheus', 'grafana', 'loki', 'promtail']
+    pipeline_stages:
+      - match:
+          selector: '{container=~".+"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  msg: msg
+                  uri: uri
+            - labels:
+                level:
+                msg:
+                uri:
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        target_label: container
+      - source_labels: [__meta_docker_container_id]
+        target_label: container_id
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service_name
+      - action: labeldrop
+        regex: '(com_docker_compose_.*|desktop_docker_io_.*)'
+      - source_labels: [__path__]
+        target_label: __path__
