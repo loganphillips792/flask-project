@@ -31,6 +31,11 @@ class User(UserMixin, BaseModel):
     name = CharField()
     email = CharField(unique=True)
     password_hash = CharField(null=True)
+    role = CharField(default="member")
+
+    @property
+    def is_admin(self):
+        return self.role == "admin"
 
     def set_password(self, raw):
         self.password_hash = generate_password_hash(raw)
@@ -45,6 +50,7 @@ class User(UserMixin, BaseModel):
             "id": self.id,
             "name": self.name,
             "email": self.email,
+            "role": self.role,
         }
 
 

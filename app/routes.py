@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from app.auth import admin_required
 from app.models import Book, Loan, User
 
 api = Blueprint("api", __name__, url_prefix="/api")
@@ -28,6 +29,7 @@ def get_loan(loan_id):
 
 
 @api.post("/loans")
+@admin_required
 def create_loan():
     data = request.get_json(silent=True) or {}
 
