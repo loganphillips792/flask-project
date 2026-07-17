@@ -74,6 +74,21 @@
     .field { margin: 0.5rem 0; }
     .field span { color: #555; }
     a.logout { color: #4f46e5; text-decoration: none; font-weight: 600; }
+    /* Locked section: shown to users without permission for the action. */
+    .card.locked { background: #fafafb; }
+    .card.locked h1 { color: #9aa0aa; }
+    .locked-note {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #f1f2f4;
+      color: #6b7280;
+      border: 1px dashed #d0d3d9;
+      padding: 0.75rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .locked-note .lock { font-size: 1.1rem; line-height: 1; }
   </style>
 </head>
 <body>

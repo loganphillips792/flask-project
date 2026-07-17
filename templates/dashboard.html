@@ -2,16 +2,21 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
   <div class="card">
-    <h1>Welcome, {{ current_user.name }}</h1>
+    <h1>Welcome, {{ current_user.name }} ({{ current_user.role }})</h1>
     <div class="field"><span>Email:</span> {{ current_user.email }}</div>
     <div class="field"><span>User ID:</span> {{ current_user.id }}</div>
     <div class="field"><span>Lucky number:</span> {{ lucky_number }}</div>
     <p><a class="logout" href="{{ url_for('auth.logout') }}">Log out</a></p>
   </div>
 
-  <div class="card">
-    <h1>Create a loan</h1>
-    {% if users and books %}
+  <div class="card{% if not current_user.is_admin %} locked{% endif %}">
+    <h1>Create a loan {% if not current_user.is_admin %}🔒{% endif %}</h1>
+    {% if not current_user.is_admin %}
+      <div class="locked-note">
+        <span class="lock">🔒</span>
+        <span>Only admins can loan out books. Your role is <strong>{{ current_user.role }}</strong>.</span>
+      </div>
+    {% elif users and books %}
       <form method="post" action="{{ url_for('auth.create_dashboard_loan') }}">
         <label for="user_id">User</label>
         <select id="user_id" name="user_id" required>

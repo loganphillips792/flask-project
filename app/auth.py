@@ -1,8 +1,10 @@
 import logging
 import random
+from functools import wraps
 
 from flask import (
     Blueprint,
+    abort,
     flash,
     redirect,
     render_template,
@@ -26,6 +28,23 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 
 auth = Blueprint("auth", __name__, template_folder="../templates")
+
+
+def admin_required(view):
+    """Allow only authenticated users whose role is 'admin'.
+
+    Stacks @login_required so anonymous requests still hit the login flow;
+    an authenticated non-admin gets a 403.
+    """
+
+    @wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if getattr(current_user, "role", None) != "admin":
+            abort(403)
+        return view(*args, **kwargs)
+
+    return wrapped
 
 
 @login_manager.user_loader
@@ -64,7 +83,7 @@ def dashboard():
 
 
 @auth.post("/dashboard/loans")
-@login_required
+@admin_required
 def create_dashboard_loan():
     # Not POST /api/loans: that endpoint reads a JSON body, so a form-encoded
     # post would fall through to its first-user/first-book defaults and quietly

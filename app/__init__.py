@@ -45,7 +45,8 @@ def create_app():
             db.create_tables(MODELS, safe=True)
             seed_data()
         print("Database initialized and seeded.")
-        print("Demo login: ada@example.com / password")
+        print("Demo login: ada@example.com / password (member)")
+        print("Admin login: admin@example.com / password (admin)")
 
     return app
 
@@ -55,6 +56,7 @@ DEMO_PASSWORD = "password"
 
 def seed_data():
     users = [
+        {"name": "Admin", "email": "admin@example.com", "role": "admin"},
         {"name": "Ada Lovelace", "email": "ada@example.com"},
         {"name": "Grace Hopper", "email": "grace@example.com"},
         {"name": "Alan Turing", "email": "alan@example.com"},
@@ -66,7 +68,12 @@ def seed_data():
         {"title": "The Mythical Man-Month", "author": "Fred Brooks", "isbn": "9780201835953"},
     ]
     for user in users:
-        obj, _ = User.get_or_create(email=user["email"], defaults={"name": user["name"]})
+        role = user.get("role", "member")
+        obj, _ = User.get_or_create(
+            email=user["email"],
+            defaults={"name": user["name"], "role": role},
+        )
+        obj.role = role
         obj.set_password(DEMO_PASSWORD)
         obj.save()
     for book in books:
