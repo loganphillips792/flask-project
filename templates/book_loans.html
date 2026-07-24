@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Loans — {{ book.title }}{% endblock %}
+{% block container_class %}wide{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Loans for “{{ book.title }}”</h1>
+    <div class="field"><span>Author:</span> {{ book.author }}</div>
+    <div class="field"><span>ISBN:</span> {{ book.isbn }}</div>
+
+    {% if loans %}
+      <table>
+        <thead>
+          <tr>
+            <th>Borrower</th>
+            <th>Loaned</th>
+            <th>Due</th>
+            <th>Returned on</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for loan in loans %}
+            <tr>
+              <td>{{ loan.user.name }}</td>
+              <td>{{ loan.loaned_at.strftime('%Y-%m-%d') }}</td>
+              <td>{{ loan.due_date }}</td>
+              {# Loans returned before returned_at existed have no date to show. #}
+              <td>{{ loan.returned_at.strftime('%Y-%m-%d') if loan.returned_at else "—" }}</td>
+              <td>
+                <div class="status-cell">
+                  <span>{{ "Returned" if loan.returned else "Out" }}</span>
+                  {% if not loan.returned %}
+                    <form method="post" action="{{ url_for('books.return_loan', loan_id=loan.id) }}">
+                      <button class="btn-small" type="submit">Mark as returned</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No one has borrowed this book yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

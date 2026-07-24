@@ -20,8 +20,8 @@ from flask_login import (
     login_user,
     logout_user,
 )
-
-from app.models import Book, Loan, User
+from app.database import db
+from app.models import Book, Loan, User, books_with_availability, copies_on_loan
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def dashboard():
         "dashboard.html",
         lucky_number=session.get("lucky_number"),
         users=User.select().order_by(User.name),
-        books=Book.select().order_by(Book.title),
+        books=books_with_availability(),
     )
 
 
@@ -105,13 +105,21 @@ def create_dashboard_loan():
         flash("Pick a valid user and book.", "error")
         return redirect(url_for("auth.dashboard"))
 
-    loan = Loan.create(user=user, book=book)
+    # Check and insert in one transaction. SQLite's deferred transactions still
+    # leave a narrow race under true concurrency — this is a guard, not a
+    # reservation system — but the app is effectively single-writer.
+    with db.atomic():
+        if copies_on_loan(book) >= book.quantity:
+            flash(f'No copies of "{book.title}" are available — all {book.quantity} are on loan.', "error")
+            return redirect(url_for("auth.dashboard"))
+        loan = Loan.create(user=user, book=book)
+
     current_app.extensions["posthog_client"].capture(
         "loan_created",
         distinct_id=str(current_user.id),
         properties={"creation_source": "dashboard", "actor_role": current_user.role},
     )
-    logger.info("user %s has created a loan for user %s", current_user.id, user.id)
+    logger.info(f"user {current_user.id} has created a loan for user {user.id}")
     flash(f'Loaned "{book.title}" to {user.name} — due {loan.due_date}.', "success")
     # Redirect rather than render: a refresh would otherwise re-create the loan.
     return redirect(url_for("auth.dashboard"))

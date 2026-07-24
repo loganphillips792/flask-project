@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Books{% endblock %}
+{% block container_class %}wide{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Books</h1>
+    <a class="btn-link" href="{{ url_for('books.new') }}">Add new book</a>
+    {% if books %}
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>ISBN</th>
+            <th class="numeric">Total</th>
+            <th class="numeric">On loan</th>
+            <th class="numeric">Available to loan</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in books %}
+            <tr{% if b.copies_available == 0 %} class="exhausted"{% endif %}>
+              <td>{{ b.title }}</td>
+              <td>{{ b.author }}</td>
+              <td>{{ b.isbn }}</td>
+              <td class="numeric">{{ b.quantity }}</td>
+              <td class="numeric">{{ b.copies_out }}</td>
+              <td class="numeric">{{ b.copies_available }}</td>
+              <td><a class="action" href="{{ url_for('books.loans', book_id=b.id) }}">View loans →</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">No books yet — run <code>flask --app run init-db</code> to seed test data.</p>
+    {% endif %}
+  </div>
+{% endblock %}

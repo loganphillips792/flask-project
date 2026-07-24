@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Add a new book{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Add a new book</h1>
+    <form method="post" action="{{ url_for('books.create') }}">
+      <label for="title">Title</label>
+      <input id="title" name="title" value="{{ title|default('') }}" required>
+
+      <label for="author">Author</label>
+      <input id="author" name="author" value="{{ author|default('') }}" required>
+
+      <label for="isbn">ISBN</label>
+      <input id="isbn" name="isbn" value="{{ isbn|default('') }}" required>
+
+      <label for="quantity">Quantity</label>
+      <input type="number" id="quantity" name="quantity" min="1"
+             value="{{ quantity|default(1, true) }}" required>
+
+      <button type="submit">Add book</button>
+    </form>
+  </div>
+{% endblock %}

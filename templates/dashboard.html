@@ -6,7 +6,6 @@
     <div class="field"><span>Email:</span> {{ current_user.email }}</div>
     <div class="field"><span>User ID:</span> {{ current_user.id }}</div>
     <div class="field"><span>Lucky number:</span> {{ lucky_number }}</div>
-    <p><a class="logout" href="{{ url_for('auth.logout') }}">Log out</a></p>
   </div>
 
   <div class="card{% if not current_user.is_admin %} locked{% endif %}">
@@ -24,7 +23,12 @@
         </select>
         <label for="book_id">Book</label>
         <select id="book_id" name="book_id" required>
-          {% for b in books %}<option value="{{ b.id }}">{{ b.title }}</option>{% endfor %}
+          {# Disabled is a hint only — create_dashboard_loan re-checks server-side. #}
+          {% for b in books %}
+            <option value="{{ b.id }}"{% if b.copies_available == 0 %} disabled{% endif %}>
+              {{ b.title }} ({{ b.copies_available }} left)
+            </option>
+          {% endfor %}
         </select>
         <button type="submit">Create loan</button>
       </form>

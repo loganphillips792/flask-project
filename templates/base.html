@@ -15,6 +15,8 @@
   </script>
   <style>
     * { box-sizing: border-box; }
+    /* Column so the nav spans the full width; .page below keeps the old
+       centred-card layout for everything under it. */
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #f4f5f7;
@@ -22,10 +24,37 @@
       margin: 0;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
+    }
+    .page {
+      flex: 1;
+      display: flex;
       align-items: center;
       justify-content: center;
       padding: 2rem 1rem;
     }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      background: #fff;
+      border-bottom: 1px solid #e4e6ea;
+      padding: 0.85rem 1.5rem;
+    }
+    .nav .brand { font-weight: 700; font-size: 1rem; margin-right: 0.5rem; }
+    .nav a {
+      color: #555;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.3rem 0;
+      border-bottom: 2px solid transparent;
+    }
+    .nav a:hover { color: #4f46e5; }
+    .nav a.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+    /* Pushes log out to the far right, whatever links precede it. */
+    .nav .spacer { margin-left: auto; }
     /* Vertical stack so a page can render several cards, each its own box. */
     .container {
       width: 100%;
@@ -34,6 +63,8 @@
       flex-direction: column;
       gap: 1.25rem;
     }
+    /* Pages that render a table opt into a wider column via container_class. */
+    .container.wide { max-width: 760px; }
     .card {
       background: #fff;
       border-radius: 12px;
@@ -64,6 +95,16 @@
       cursor: pointer;
     }
     button:hover { background: #4338ca; }
+    /* In-table action button: the full-width default would stretch the cell. */
+    button.btn-small {
+      width: auto;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    td form { margin: 0; }
+    /* Status text and its action side by side, without stretching the row. */
+    .status-cell { display: flex; align-items: center; gap: 0.75rem; }
     .error {
       background: #fdecea;
       color: #b71c1c;
@@ -82,7 +123,28 @@
     }
     .field { margin: 0.5rem 0; }
     .field span { color: #555; }
-    a.logout { color: #4f46e5; text-decoration: none; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { padding: 0.6rem 0.5rem; text-align: left; border-bottom: 1px solid #eceef1; }
+    th { color: #555; font-size: 0.85rem; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    td.numeric, th.numeric { text-align: right; }
+    /* A book with every copy on loan: still listed, visibly unavailable. */
+    tr.exhausted td { color: #9aa0aa; }
+    a.action { color: #4f46e5; text-decoration: none; font-weight: 600; white-space: nowrap; }
+    /* An <a> that reads as a button, for navigation that isn't a form submit. */
+    a.btn-link {
+      display: inline-block;
+      padding: 0.5rem 0.9rem;
+      margin-bottom: 1rem;
+      border-radius: 8px;
+      background: #4f46e5;
+      color: #fff;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    a.btn-link:hover { background: #4338ca; }
+    .empty { color: #6b7280; font-size: 0.9rem; }
     /* Locked section: shown to users without permission for the action. */
     .card.locked { background: #fafafb; }
     .card.locked h1 { color: #9aa0aa; }
@@ -101,11 +163,30 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    {% for category, message in get_flashed_messages(with_categories=true) %}
-      <div class="{{ category }}">{{ message }}</div>
-    {% endfor %}
-    {% block content %}{% endblock %}
+  {# Anonymous visitors only ever see the login page, and both book links are
+     admin-only, so the nav is scoped accordingly rather than offering links
+     that would 403. #}
+  {% if current_user.is_authenticated %}
+    <nav class="nav">
+      <span class="brand">Library</span>
+      <a href="{{ url_for('auth.dashboard') }}"
+         class="{{ 'active' if request.endpoint == 'auth.dashboard' }}">Dashboard</a>
+      {% if current_user.is_admin %}
+        <a href="{{ url_for('books.index') }}"
+           class="{{ 'active' if request.endpoint in ['books.index', 'books.loans'] }}">View all books</a>
+        <a href="{{ url_for('books.new') }}"
+           class="{{ 'active' if request.endpoint == 'books.new' }}">Create new book</a>
+      {% endif %}
+      <a class="spacer" href="{{ url_for('auth.logout') }}">Log out</a>
+    </nav>
+  {% endif %}
+  <div class="page">
+    <div class="container {% block container_class %}{% endblock %}">
+      {% for category, message in get_flashed_messages(with_categories=true) %}
+        <div class="{{ category }}">{{ message }}</div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </div>
   </div>
 </body>
 </html>
