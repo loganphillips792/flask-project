@@ -1,14 +1,36 @@
+import atexit
 import os
 
+from dotenv import load_dotenv
 from flask import Flask
+from posthog import Posthog
 
 from app.database import db
 from app.models import MODELS, Book, User
 
 
 def create_app():
+    load_dotenv()
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+
+    posthog_client = Posthog(
+        os.environ["POSTHOG_PROJECT_TOKEN"],
+        host=os.environ["POSTHOG_HOST"],
+        enable_exception_autocapture=True,
+    )
+    app.extensions["posthog_client"] = posthog_client
+    atexit.register(posthog_client.shutdown)
+
+    # Expose the public project token to templates so posthog-js (in base.html)
+    # can capture client-side $pageview events — the basis for unique-visitor
+    # analytics, including anonymous, logged-out visitors the Python SDK never sees.
+    @app.context_processor
+    def inject_posthog_config():
+        return {
+            "posthog_token": os.environ["POSTHOG_PROJECT_TOKEN"],
+            "posthog_host": os.environ["POSTHOG_HOST"],
+        }
 
     from app.auth import auth, login_manager
     from app.observability import init_observability
