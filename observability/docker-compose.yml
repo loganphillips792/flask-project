@@ -7,6 +7,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - '5001:5001'
+    # POSTHOG_PROJECT_TOKEN / POSTHOG_HOST live in the repo-root .env (../.env
+    # relative to this included file's project directory). create_app() reads
+    # them via os.environ, so they must be injected into the container, not just
+    # available for compose variable substitution.
+    env_file:
+      - ../.env
     environment:
       - SECRET_KEY=dev-secret-change-me
       - LIBRARY_DB_PATH=/data/library.db

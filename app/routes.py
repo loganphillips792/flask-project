@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.auth import admin_required
 from app.models import Book, Loan, User
@@ -52,4 +52,9 @@ def create_loan():
             return jsonify({"error": "No books exist; run `flask --app run init-db` to seed test data"}), 400
 
     loan = Loan.create(user=user, book=book)
+    current_app.extensions["posthog_client"].capture(
+        "loan_created",
+        distinct_id=str(current_user.id),
+        properties={"creation_source": "api", "actor_role": current_user.role},
+    )
     return jsonify(loan.to_dict()), 201
