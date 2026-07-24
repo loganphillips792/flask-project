@@ -21,7 +21,15 @@ from flask_login import (
     logout_user,
 )
 from app.database import db
-from app.models import Book, Loan, User, books_with_availability, copies_on_loan
+from app.models import (
+    TIME_FORMATS,
+    TIMEZONES,
+    Book,
+    Loan,
+    User,
+    books_with_availability,
+    copies_on_loan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +131,40 @@ def create_dashboard_loan():
     flash(f'Loaned "{book.title}" to {user.name} — due {loan.due_date}.', "success")
     # Redirect rather than render: a refresh would otherwise re-create the loan.
     return redirect(url_for("auth.dashboard"))
+
+
+@auth.get("/settings")
+@login_required
+def settings():
+    # Not admin-gated: these are display preferences, and every user owns theirs.
+    return render_template("settings.html", timezones=TIMEZONES, time_formats=TIME_FORMATS)
+
+
+@auth.post("/settings")
+@login_required
+def update_settings():
+    timezone = request.form.get("timezone", "")
+    time_format = request.form.get("time_format", "")
+
+    # Validate against the allowlists rather than trusting the <select>: the
+    # timezone ends up in ZoneInfo(), which raises on anything it doesn't know.
+    if timezone not in TIMEZONES or time_format not in TIME_FORMATS:
+        flash("Pick a valid timezone and time format.", "error")
+        return redirect(url_for("auth.settings"))
+
+    current_user.timezone = timezone
+    current_user.time_format = time_format
+    current_user.save()
+
+    current_app.extensions["posthog_client"].capture(
+        "settings_updated",
+        distinct_id=str(current_user.id),
+        properties={"timezone": timezone, "time_format": time_format},
+    )
+    logger.info(f"user {current_user.id} set timezone {timezone} and {time_format}-hour time")
+    flash("Settings saved.", "success")
+    # Redirect rather than render: a refresh would otherwise re-submit the form.
+    return redirect(url_for("auth.settings"))
 
 
 @auth.get("/logout")

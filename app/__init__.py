@@ -1,8 +1,10 @@
 import atexit
 import os
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from flask import Flask
+from flask_login import current_user
 from posthog import Posthog
 
 from app.database import db
@@ -31,6 +33,25 @@ def create_app():
             "posthog_token": os.environ["POSTHOG_PROJECT_TOKEN"],
             "posthog_host": os.environ["POSTHOG_HOST"],
         }
+
+    # Every stored timestamp renders through here, so a single preference change
+    # moves the whole app rather than each template formatting its own way.
+    @app.template_filter("user_time")
+    def user_time(value):
+        """Render a DB timestamp in the viewer's timezone and clock format.
+
+        Loan timestamps are naive `datetime.now()` values — server-local, not
+        UTC — so they're localised to the server zone before being converted.
+        """
+        if value is None:
+            return "—"
+        tz = ZoneInfo(getattr(current_user, "timezone", None) or "UTC")
+        aware = value.astimezone() if value.tzinfo is None else value
+        if getattr(current_user, "time_format", "12") == "24":
+            pattern = "%Y-%m-%d %H:%M"
+        else:
+            pattern = "%Y-%m-%d %I:%M %p"
+        return aware.astimezone(tz).strftime(pattern)
 
     from app.auth import auth, login_manager
     from app.books import books
@@ -87,6 +108,8 @@ COLUMN_MIGRATIONS = [
     ("user", "role", "ALTER TABLE \"user\" ADD COLUMN role VARCHAR(255) NOT NULL DEFAULT 'member'"),
     ("book", "quantity", "ALTER TABLE book ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1"),
     ("loan", "returned_at", "ALTER TABLE loan ADD COLUMN returned_at DATETIME"),
+    ("user", "timezone", "ALTER TABLE \"user\" ADD COLUMN timezone VARCHAR(255) NOT NULL DEFAULT 'UTC'"),
+    ("user", "time_format", "ALTER TABLE \"user\" ADD COLUMN time_format VARCHAR(255) NOT NULL DEFAULT '12'"),
 ]
 
 
