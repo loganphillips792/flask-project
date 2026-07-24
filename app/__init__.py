@@ -33,6 +33,7 @@ def create_app():
         }
 
     from app.auth import auth, login_manager
+    from app.books import books
     from app.observability import init_observability
     from app.routes import api, health
     from app.session import PeeweeSessionInterface
@@ -42,6 +43,7 @@ def create_app():
     login_manager.init_app(app)
     app.register_blueprint(api)
     app.register_blueprint(auth)
+    app.register_blueprint(books)
     app.register_blueprint(health)
 
     # After the blueprints: PrometheusMetrics labels by endpoint, so it needs
@@ -50,6 +52,7 @@ def create_app():
 
     with db:
         db.create_tables(MODELS, safe=True)
+        ensure_schema()
 
     @app.before_request
     def open_connection():
@@ -65,12 +68,39 @@ def create_app():
         """Create tables and seed test users and books."""
         with db:
             db.create_tables(MODELS, safe=True)
+            ensure_schema()
             seed_data()
         print("Database initialized and seeded.")
         print("Demo login: ada@example.com / password (member)")
         print("Admin login: admin@example.com / password (admin)")
 
     return app
+
+
+# Plain ALTER statements: SQLite accepts a NOT NULL column when it carries a
+# non-null default, and backfills existing rows with it. Deliberately not
+# playhouse.migrate — its add_column rebuilds the table to apply NOT NULL, and
+# the rebuild fails the foreign_keys pragma via loan.book_id.
+COLUMN_MIGRATIONS = [
+    # Predates the quantity work: databases created before roles existed have no
+    # user.role, and every login fails on `no such column: t1.role`.
+    ("user", "role", "ALTER TABLE \"user\" ADD COLUMN role VARCHAR(255) NOT NULL DEFAULT 'member'"),
+    ("book", "quantity", "ALTER TABLE book ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1"),
+    ("loan", "returned_at", "ALTER TABLE loan ADD COLUMN returned_at DATETIME"),
+]
+
+
+def ensure_schema():
+    """Add columns that `create_tables(safe=True)` can't retrofit.
+
+    create_tables only creates *missing tables* — it never alters an existing
+    one, so a database created before a field was added keeps the old columns
+    and every query for the new one fails. Runs on every startup and is a no-op
+    once applied.
+    """
+    for table, column, ddl in COLUMN_MIGRATIONS:
+        if column not in {existing.name for existing in db.get_columns(table)}:
+            db.execute_sql(ddl)
 
 
 DEMO_PASSWORD = "password"
@@ -84,10 +114,10 @@ def seed_data():
         {"name": "Alan Turing", "email": "alan@example.com"},
     ]
     books = [
-        {"title": "The Pragmatic Programmer", "author": "Hunt & Thomas", "isbn": "9780135957059"},
-        {"title": "Fluent Python", "author": "Luciano Ramalho", "isbn": "9781492056355"},
-        {"title": "Designing Data-Intensive Applications", "author": "Martin Kleppmann", "isbn": "9781449373320"},
-        {"title": "The Mythical Man-Month", "author": "Fred Brooks", "isbn": "9780201835953"},
+        {"title": "The Pragmatic Programmer", "author": "Hunt & Thomas", "isbn": "9780135957059", "quantity": 3},
+        {"title": "Fluent Python", "author": "Luciano Ramalho", "isbn": "9781492056355", "quantity": 2},
+        {"title": "Designing Data-Intensive Applications", "author": "Martin Kleppmann", "isbn": "9781449373320", "quantity": 2},
+        {"title": "The Mythical Man-Month", "author": "Fred Brooks", "isbn": "9780201835953", "quantity": 1},
     ]
     for user in users:
         role = user.get("role", "member")
@@ -99,4 +129,11 @@ def seed_data():
         obj.set_password(DEMO_PASSWORD)
         obj.save()
     for book in books:
-        Book.get_or_create(isbn=book["isbn"], defaults={"title": book["title"], "author": book["author"]})
+        obj, _ = Book.get_or_create(
+            isbn=book["isbn"],
+            defaults={"title": book["title"], "author": book["author"], "quantity": book["quantity"]},
+        )
+        # Reset stock on the demo titles the same way user passwords are reset,
+        # so the seeded quantities show up on a database that predates them.
+        obj.quantity = book["quantity"]
+        obj.save()

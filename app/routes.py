@@ -1,7 +1,9 @@
 from flask import Blueprint, current_app, jsonify, request
+from flask_login import current_user
 
 from app.auth import admin_required
-from app.models import Book, Loan, User
+from app.database import db
+from app.models import Book, Loan, User, copies_on_loan
 
 api = Blueprint("api", __name__, url_prefix="/api")
 health = Blueprint("health", __name__)
@@ -51,7 +53,13 @@ def create_loan():
         if book is None:
             return jsonify({"error": "No books exist; run `flask --app run init-db` to seed test data"}), 400
 
-    loan = Loan.create(user=user, book=book)
+    # Same availability rule as the dashboard form; 409 because the request is
+    # well-formed and it's the current state that forbids it.
+    with db.atomic():
+        if copies_on_loan(book) >= book.quantity:
+            return jsonify({"error": f'No copies of "{book.title}" are available'}), 409
+        loan = Loan.create(user=user, book=book)
+
     current_app.extensions["posthog_client"].capture(
         "loan_created",
         distinct_id=str(current_user.id),
