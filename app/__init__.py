@@ -34,8 +34,9 @@ def create_app():
             "posthog_host": os.environ["POSTHOG_HOST"],
         }
 
-    # Every stored timestamp renders through here, so a single preference change
-    # moves the whole app rather than each template formatting its own way.
+    # Every stored timestamp renders through here, so changing a user's timezone
+    # or clock-format preference reformats every date across the app at once,
+    # rather than each template formatting its own way.
     @app.template_filter("user_time")
     def user_time(value):
         """Render a DB timestamp in the viewer's timezone and clock format.
