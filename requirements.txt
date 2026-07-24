@@ -3,6 +3,9 @@ posthog>=7.0
 python-dotenv>=1.0
 peewee>=3.17
 flask-login>=0.6
+# zoneinfo is stdlib, but python:3.12-slim carries no system tz database, so
+# ZoneInfo("America/Chicago") would raise ZoneInfoNotFoundError without this.
+tzdata
 gunicorn>=21.2
 
 prometheus-flask-exporter>=0.23.1

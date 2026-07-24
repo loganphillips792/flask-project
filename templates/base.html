@@ -53,8 +53,56 @@
     }
     .nav a:hover { color: #4f46e5; }
     .nav a.active { color: #4f46e5; border-bottom-color: #4f46e5; }
-    /* Pushes log out to the far right, whatever links precede it. */
+    /* Pushes the clock and avatar to the far right, whatever links precede it. */
     .nav .spacer { margin-left: auto; }
+    /* tabular-nums so the ticking seconds don't shift the clock's width. */
+    .clock {
+      color: #555;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .avatar-menu { position: relative; }
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #4f46e5;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    /* Hover-only menu, no JS. The wrapper's padding-top gives the pointer a
+       bridge from the avatar to the menu, so it doesn't close mid-travel. */
+    .avatar-menu .menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      padding-top: 0.5rem;
+      z-index: 10;
+    }
+    .avatar-menu:hover .menu { display: block; }
+    .avatar-menu .menu-inner {
+      background: #fff;
+      border: 1px solid #e4e6ea;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+      padding: 0.35rem 0;
+      min-width: 130px;
+    }
+    .avatar-menu .menu a {
+      display: block;
+      padding: 0.5rem 0.9rem;
+      border-bottom: none;
+      white-space: nowrap;
+    }
+    .avatar-menu .menu a:hover { background: #f4f5f7; }
     /* Vertical stack so a page can render several cards, each its own box. */
     .container {
       width: 100%;
@@ -177,7 +225,20 @@
         <a href="{{ url_for('books.new') }}"
            class="{{ 'active' if request.endpoint == 'books.new' }}">Create new book</a>
       {% endif %}
-      <a class="spacer" href="{{ url_for('auth.logout') }}">Log out</a>
+      {# The current time in the viewer's chosen zone/format; filled in and
+         ticked by the script at the end of <body>. #}
+      <span class="spacer clock"
+            data-tz="{{ current_user.timezone }}"
+            data-fmt="{{ current_user.time_format }}"></span>
+      <div class="avatar-menu">
+        <div class="avatar">{{ current_user.initials }}</div>
+        <div class="menu">
+          <div class="menu-inner">
+            <a href="{{ url_for('auth.settings') }}">Settings</a>
+            <a href="{{ url_for('auth.logout') }}">Log out</a>
+          </div>
+        </div>
+      </div>
     </nav>
   {% endif %}
   <div class="page">
@@ -188,5 +249,23 @@
       {% block content %}{% endblock %}
     </div>
   </div>
+  {# Ticked client-side rather than rendered server-side: a server-rendered time
+     freezes at page load and drifts on a page left open. #}
+  <script>
+    (function () {
+      var el = document.querySelector('.clock');
+      if (!el) return;  // anonymous visitors get no nav, and so no clock
+      var fmt = new Intl.DateTimeFormat([], {
+        timeZone: el.dataset.tz,
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: el.dataset.fmt === '12'
+      });
+      function tick() { el.textContent = fmt.format(new Date()); }
+      tick();
+      setInterval(tick, 1000);
+    })();
+  </script>
 </body>
 </html>
