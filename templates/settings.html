@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+  <div class="card">
+    <h1>Settings</h1>
+    <p class="empty">Choose how times are displayed for your account.</p>
+    <form method="post" action="{{ url_for('auth.update_settings') }}">
+      <label for="timezone">Timezone</label>
+      <select id="timezone" name="timezone" required>
+        {% for tz in timezones %}
+          <option value="{{ tz }}"{% if tz == current_user.timezone %} selected{% endif %}>
+            {{ tz.replace('_', ' ') }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <label for="time_format">Time format</label>
+      <select id="time_format" name="time_format" required>
+        <option value="12"{% if current_user.time_format == '12' %} selected{% endif %}>
+          12-hour (3:42 PM)
+        </option>
+        <option value="24"{% if current_user.time_format == '24' %} selected{% endif %}>
+          24-hour (15:42)
+        </option>
+      </select>
+
+      <button type="submit">Save settings</button>
+    </form>
+  </div>
+{% endblock %}

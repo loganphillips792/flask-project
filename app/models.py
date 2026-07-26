@@ -20,6 +20,36 @@ from app.database import db
 
 LOAN_PERIOD_DAYS = 14
 
+# A curated shortlist rather than the full IANA set: a ~600-entry <select> is
+# unusable, and these cover the zones this library's members actually sit in.
+# Anything a user posts is validated against this list before it reaches
+# ZoneInfo(), so the list doubles as the allowlist.
+TIMEZONES = [
+    "UTC",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "America/Sao_Paulo",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Europe/Madrid",
+    "Europe/Moscow",
+    "Africa/Johannesburg",
+    "Asia/Dubai",
+    "Asia/Kolkata",
+    "Asia/Shanghai",
+    "Asia/Tokyo",
+    "Asia/Singapore",
+    "Australia/Sydney",
+    "Pacific/Auckland",
+]
+
+TIME_FORMATS = ["12", "24"]
+
 
 def _default_due_date():
     return datetime.date.today() + datetime.timedelta(days=LOAN_PERIOD_DAYS)
@@ -35,10 +65,24 @@ class User(UserMixin, BaseModel):
     email = CharField(unique=True)
     password_hash = CharField(null=True)
     role = CharField(default="member")
+    timezone = CharField(default="UTC")
+    time_format = CharField(default="12")  # "12" or "24"
 
     @property
     def is_admin(self):
         return self.role == "admin"
+
+    @property
+    def initials(self):
+        """Up to two letters for the nav avatar.
+
+        Falls back to the email when the name is blank, so the circle is never
+        empty — every user has an email, it's the unique key.
+        """
+        parts = (self.name or "").split()
+        if not parts:
+            return (self.email or "?")[:1].upper()
+        return "".join(part[0] for part in parts[:2]).upper()
 
     def set_password(self, raw):
         self.password_hash = generate_password_hash(raw)
@@ -54,6 +98,8 @@ class User(UserMixin, BaseModel):
             "name": self.name,
             "email": self.email,
             "role": self.role,
+            "timezone": self.timezone,
+            "time_format": self.time_format,
         }
 
 

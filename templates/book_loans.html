@@ -22,10 +22,11 @@
           {% for loan in loans %}
             <tr>
               <td>{{ loan.user.name }}</td>
-              <td>{{ loan.loaned_at.strftime('%Y-%m-%d') }}</td>
+              <td>{{ loan.loaned_at | user_time }}</td>
               <td>{{ loan.due_date }}</td>
-              {# Loans returned before returned_at existed have no date to show. #}
-              <td>{{ loan.returned_at.strftime('%Y-%m-%d') if loan.returned_at else "—" }}</td>
+              {# Loans returned before returned_at existed have no date to show —
+                 user_time renders those as a dash. #}
+              <td>{{ loan.returned_at | user_time }}</td>
               <td>
                 <div class="status-cell">
                   <span>{{ "Returned" if loan.returned else "Out" }}</span>
