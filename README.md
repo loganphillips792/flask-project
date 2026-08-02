@@ -25,7 +25,8 @@ requirements.txt
 ## Setup
 
 Two ways to run it: a local virtualenv, or Docker. The virtualenv is lighter and
-auto-reloads on save; Docker brings up the observability stack alongside the app.
+auto-reloads on save; Docker brings up the observability stack alongside the app
+(or [just the app](#option-b-without-observability), if you don't need it).
 
 ### Option A — local virtualenv
 
@@ -91,6 +92,35 @@ Grafana dashboards are covered in [Running with the observability
 stack](#running-with-the-observability-stack). Note that the containerized
 database is a named volume, entirely separate from the `library.db` in your
 project root.
+
+### Option B, without observability
+
+To run the Docker app without the five observability containers, start only
+the `flask-app` service and blank out the trace exporter endpoint:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT= docker compose up --build --no-deps flask-app
+```
+
+- `--no-deps flask-app` starts just the app — Prometheus, Grafana, Loki,
+  Promtail and Tempo stay down, so nothing scrapes `/metrics` and there are
+  no dashboards.
+- The leading `OTEL_EXPORTER_OTLP_ENDPOINT=` overrides the compose default of
+  `http://tempo:4318` with an empty value, so the app still creates spans (log
+  lines keep their `trace_id`) but exports them nowhere, instead of endlessly
+  retrying against a Tempo that isn't running.
+
+Everything else is identical to the full stack: same URL, same seeded logins,
+same `.env` requirement, same `library-data` database volume — so your data
+carries over if you later bring up the full stack with a plain
+`docker compose up`.
+
+Stop it with `docker compose down` as usual (`-v` also wipes the database
+volume). After a code change, rerun the same command with `-d` to rebuild and
+recreate just the app. One caveat: if the full stack is already running, the
+command above only recreates `flask-app` (now pointed at nothing) and leaves
+the other five containers running — `docker compose down` first if you want
+them gone.
 
 ## Users and roles
 

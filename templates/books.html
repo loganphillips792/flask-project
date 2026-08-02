@@ -16,6 +16,7 @@
             <th class="numeric">On loan</th>
             <th class="numeric">Available to loan</th>
             <th></th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -28,6 +29,7 @@
               <td class="numeric">{{ b.copies_out }}</td>
               <td class="numeric">{{ b.copies_available }}</td>
               <td><a class="action" href="{{ url_for('books.loans', book_id=b.id) }}">View loans →</a></td>
+              <td><a class="action" href="{{ url_for('books.edit', book_id=b.id) }}" title="Edit book" aria-label="Edit {{ b.title }}">✎</a></td>
             </tr>
           {% endfor %}
         </tbody>

@@ -80,6 +80,78 @@ def create():
     return redirect(url_for("books.index"))
 
 
+@books.get("/books/<int:book_id>/edit")
+@admin_required
+def edit(book_id):
+    book = Book.get_or_none(Book.id == book_id)
+    if book is None:
+        abort(404)
+    return render_template(
+        "book_form.html",
+        book=book,
+        title=book.title,
+        author=book.author,
+        isbn=book.isbn,
+        quantity=book.quantity,
+    )
+
+
+@books.post("/books/<int:book_id>")
+@admin_required
+def update(book_id):
+    book = Book.get_or_none(Book.id == book_id)
+    if book is None:
+        abort(404)
+
+    title = request.form.get("title", "").strip()
+    author = request.form.get("author", "").strip()
+    isbn = request.form.get("isbn", "").strip()
+    # type=int yields None on anything unparseable rather than raising.
+    quantity = request.form.get("quantity", type=int)
+
+    def reject(message):
+        flash(message, "error")
+        # Re-render rather than redirect so the admin doesn't retype the fields
+        # that were already fine.
+        return render_template(
+            "book_form.html",
+            book=book,
+            title=title,
+            author=author,
+            isbn=isbn,
+            quantity=quantity,
+        ), 400
+
+    if not (title and author and isbn):
+        return reject("Title, author and ISBN are all required.")
+
+    if quantity is None or quantity < 1:
+        return reject("Quantity must be a whole number of 1 or more.")
+
+    if Book.get_or_none((Book.isbn == isbn) & (Book.id != book.id)) is not None:
+        return reject(f"A book with ISBN {isbn} already exists.")
+
+    book.title = title
+    book.author = author
+    book.isbn = isbn
+    book.quantity = quantity
+    try:
+        book.save()
+    except IntegrityError:
+        # Backstop for the check-then-update race: the unique index on isbn is
+        # the real guarantee, and losing it should not surface as a 500.
+        return reject(f"A book with ISBN {isbn} already exists.")
+
+    current_app.extensions["posthog_client"].capture(
+        "book_updated",
+        distinct_id=str(g.user.id),
+        properties={"actor_role": g.user.role},
+    )
+    logger.info(f"admin user {g.user.email} updated book {book.id} ({isbn})")
+    flash(f'Updated "{book.title}".', "success")
+    return redirect(url_for("books.index"))
+
+
 @books.get("/books/<int:book_id>/loans")
 @admin_required
 def loans(book_id):
