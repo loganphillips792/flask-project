@@ -1,36 +1,9 @@
-name: flask-observability
+name: flask-project
 
+# Observability backends only. The flask-app service lives in the repo-root
+# compose.yaml, which `include`s this file; prometheus.yml still scrapes it by
+# service name over library-network.
 services:
-  flask-app:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    ports:
-      - '5001:5001'
-    # POSTHOG_PROJECT_TOKEN / POSTHOG_HOST live in the repo-root .env (../.env
-    # relative to this included file's project directory). create_app() reads
-    # them via os.environ, so they must be injected into the container, not just
-    # available for compose variable substitution.
-    env_file:
-      - ../.env
-    environment:
-      - SECRET_KEY=dev-secret-change-me
-      - LIBRARY_DB_PATH=/data/library.db
-      - OTEL_SERVICE_NAME=flask-app
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
-      - LOG_LEVEL=INFO
-      # Seeds demo users and books before gunicorn starts, so the stack comes up
-      # with a working demo login instead of empty tables.
-      - SEED_DB=1
-    volumes:
-      # Named volume, not a bind mount: SQLite WAL mode needs an mmap'd -shm
-      # file, which is unreliable over Docker Desktop's filesystem sharing.
-      - library-data:/data
-    depends_on:
-      - tempo
-    networks:
-      - library-network
-
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -106,7 +79,6 @@ services:
       - library-network
 
 volumes:
-  library-data:
   grafana-storage:
   loki-data:
   loki-wal:

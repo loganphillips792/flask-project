@@ -15,7 +15,7 @@ app/
 └── session.py       # server-side sessions stored via peewee
 templates/           # login, dashboard, book catalog and add-book pages
 observability/       # Prometheus, Grafana, Loki, Promtail and Tempo stack
-compose.yaml         # includes observability/ so `docker compose up` works from the root
+compose.yaml         # the flask-app service; includes observability/ so `docker compose up` works from the root
 Dockerfile
 docker-entrypoint.sh # seeds the DB when SEED_DB=1, then starts gunicorn
 run.py               # entry point for the dev server
@@ -23,6 +23,11 @@ requirements.txt
 ```
 
 ## Setup
+
+Two ways to run it: a local virtualenv, or Docker. The virtualenv is lighter and
+auto-reloads on save; Docker brings up the observability stack alongside the app.
+
+### Option A — local virtualenv
 
 Requires Python 3.10+.
 
@@ -45,13 +50,47 @@ Requires Python 3.10+.
    flask --app run init-db
    ```
 
-## Running the app
+4. Start the dev server:
 
-```bash
-python run.py
-```
+   ```bash
+   python run.py
+   ```
 
-The dev server starts on http://127.0.0.1:5001. The SQLite database is stored in `library.db` in the project root.
+   It listens on http://127.0.0.1:5001 and reloads on save. The SQLite database
+   is stored in `library.db` in the project root.
+
+### Option B — Docker
+
+Requires Docker Desktop. No Python install, no venv, and no separate `init-db`
+step — the container seeds itself on the way up.
+
+1. Create your `.env` — it's gitignored, so a fresh clone won't have one, and
+   compose refuses to start without it:
+
+   ```bash
+   cp env.example .env   # then fill in POSTHOG_PROJECT_TOKEN
+   ```
+
+2. Build and start everything, from the project root:
+
+   ```bash
+   docker compose up --build
+   ```
+
+   The app comes up on http://localhost:5001 — same as the dev server — plus the
+   five observability backends. Log in with `ada@example.com` / `password`.
+
+3. Stop it:
+
+   ```bash
+   docker compose down      # add -v to also wipe the database volume
+   ```
+
+Rebuilding after a code change, inspecting the container's database, and the
+Grafana dashboards are covered in [Running with the observability
+stack](#running-with-the-observability-stack). Note that the containerized
+database is a named volume, entirely separate from the `library.db` in your
+project root.
 
 ## Users and roles
 
@@ -133,9 +172,16 @@ u.save()
 
 ## Running with the observability stack
 
-The `observability/` directory runs the app in Docker alongside Prometheus (metrics), Loki + Promtail (logs), Tempo (traces) and Grafana (dashboards). Requires Docker Desktop.
+`compose.yaml` runs the app in Docker alongside the `observability/` backends — Prometheus (metrics), Loki + Promtail (logs), Tempo (traces) and Grafana (dashboards). Requires Docker Desktop.
 
-1. Build and start everything, from the project root:
+1. Create your `.env` if you haven't already — it's gitignored, so a fresh clone
+   won't have one, and compose refuses to start without it:
+
+   ```bash
+   cp env.example .env   # then fill in POSTHOG_PROJECT_TOKEN
+   ```
+
+2. Build and start everything, from the project root:
 
    ```bash
    docker compose up --build
@@ -145,14 +191,14 @@ The `observability/` directory runs the app in Docker alongside Prometheus (metr
    seeds the database on the way up — no second terminal needed. Log in with
    `ada@example.com` / `password`.
 
-2. Generate some traffic:
+3. Generate some traffic:
 
    ```bash
    curl -X POST http://127.0.0.1:5001/api/loans
    curl http://127.0.0.1:5001/api/loans
    ```
 
-3. Open Grafana at http://localhost:3001 (`admin` / `secretpassword`) and go to the **Library App** dashboard.
+4. Open Grafana at http://localhost:3001 (`admin` / `secretpassword`) and go to the **Library App** dashboard.
 
 Once running, these are the pieces:
 
@@ -196,7 +242,7 @@ That's a point-in-time copy, not a live view. To reset the container's data:
 docker compose down -v
 ```
 
-The root `compose.yaml` only `include:`s `observability/docker-compose.yml`, which is where the services are actually defined. Seeding runs from `docker-entrypoint.sh` before gunicorn starts, gated on `SEED_DB=1` (set on the `flask-app` service) so the image doesn't create demo users anywhere else. It's idempotent, so it re-runs harmlessly on every restart.
+The root `compose.yaml` defines the `flask-app` service and `include:`s `observability/docker-compose.yml`, which defines the five observability backends. They share one compose project, so the app and the backends land on the same `library-network` — that's how `prometheus.yml` reaches the app by its `flask-app` service name. Seeding runs from `docker-entrypoint.sh` before gunicorn starts, gated on `SEED_DB=1` (set on the `flask-app` service) so the image doesn't create demo users anywhere else. It's idempotent, so it re-runs harmlessly on every restart.
 
 ### What's wired up
 
