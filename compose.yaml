@@ -1,7 +1,52 @@
-# Lets `docker compose up --build` run from the repo root. `include` gives the
-# included file its own project directory, so the relative paths inside it
-# (./prometheus.yml, context: ..) still resolve against observability/.
-name: flask-observability
+# The app is defined here; `include` pulls in the observability backends, which
+# get their own project directory so the relative paths inside that file
+# (./prometheus.yml, ./tempo.yaml) still resolve against observability/.
+# Both files share one project, so `flask-app` and the backends land on the same
+# network and `docker compose up --build` from the repo root brings up everything.
+name: flask-project
 
 include:
   - observability/docker-compose.yml
+
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '5001:5001'
+    # POSTHOG_PROJECT_TOKEN / POSTHOG_HOST live in the repo-root .env (copy
+    # env.example to .env first — compose errors out if it's missing).
+    # create_app() reads them via os.environ, so they must be injected into the
+    # container, not just available for compose variable substitution.
+    env_file:
+      - .env
+    environment:
+      # SECRET_KEY deliberately isn't set here: values under `environment:` beat
+      # anything in env_file, so hardcoding it would silently shadow the
+      # SECRET_KEY in .env. Unset, create_app() falls back to a dev-only default.
+      - LIBRARY_DB_PATH=/data/library.db
+      - OTEL_SERVICE_NAME=flask-app
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - LOG_LEVEL=INFO
+      # Seeds demo users and books before gunicorn starts, so the stack comes up
+      # with a working demo login instead of empty tables.
+      - SEED_DB=1
+    volumes:
+      # Named volume, not a bind mount: SQLite WAL mode needs an mmap'd -shm
+      # file, which is unreliable over Docker Desktop's filesystem sharing.
+      - library-data:/data
+    depends_on:
+      - tempo
+    networks:
+      - library-network
+
+volumes:
+  library-data:
+
+# Also declared in observability/docker-compose.yml; include merges the two into
+# the one project network. The service name `flask-app` and this network are
+# load-bearing: prometheus.yml scrapes `flask-app:5001` by DNS name.
+networks:
+  library-network:
+    driver: bridge
