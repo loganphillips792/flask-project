@@ -27,7 +27,10 @@ services:
       # SECRET_KEY in .env. Unset, create_app() falls back to a dev-only default.
       - LIBRARY_DB_PATH=/data/library.db
       - OTEL_SERVICE_NAME=flask-app
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      # ${VAR-default} (not :-) so an explicitly empty shell var wins over the
+      # default: `OTEL_EXPORTER_OTLP_ENDPOINT= docker compose up --no-deps
+      # flask-app` runs the app without Tempo and without export retry noise.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT-http://tempo:4318}
       - LOG_LEVEL=INFO
       # Seeds demo users and books before gunicorn starts, so the stack comes up
       # with a working demo login instead of empty tables.

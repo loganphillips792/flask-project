@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Add a new book{% endblock %}
+{% block title %}{% if book %}Edit book{% else %}Add a new book{% endif %}{% endblock %}
 {% block content %}
   <div class="card">
-    <h1>Add a new book</h1>
-    <form method="post" action="{{ url_for('books.create') }}">
+    <h1>{% if book %}Edit book{% else %}Add a new book{% endif %}</h1>
+    <form method="post"
+          action="{% if book %}{{ url_for('books.update', book_id=book.id) }}{% else %}{{ url_for('books.create') }}{% endif %}">
       <label for="title">Title</label>
       <input id="title" name="title" value="{{ title|default('') }}" required>
 
@@ -17,7 +18,7 @@
       <input type="number" id="quantity" name="quantity" min="1"
              value="{{ quantity|default(1, true) }}" required>
 
-      <button type="submit">Add book</button>
+      <button type="submit">{% if book %}Save changes{% else %}Add book{% endif %}</button>
     </form>
   </div>
 {% endblock %}
