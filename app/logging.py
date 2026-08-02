@@ -3,7 +3,8 @@
 `init_logging()` installs a stdout handler that emits one JSON object per line
 and registers a per-request access log. Promtail ships these lines to Loki, and
 each carries the active span's trace_id so Grafana can jump from a Tempo span
-straight to its logs.
+straight to its logs. Setting LOG_FILE mirrors the same lines to a rotating
+file on disk.
 
 Named `logging` but this does not shadow the stdlib: inside the `app` package,
 a bare `import logging` still resolves to the top-level stdlib module.
@@ -13,6 +14,7 @@ import json
 import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 
 from flask import has_request_context, request
 from opentelemetry import trace
@@ -69,13 +71,30 @@ def init_logging(app, service_name, excluded_paths):
 
 
 def _configure_handler(service_name):
+    formatter = JsonFormatter(service_name)
+
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter(service_name))
+    handler.setFormatter(formatter)
+    handlers = [handler]
+
+    # Opt-in second sink: containers keep scraping stdout, but a local or
+    # bare-metal run can set LOG_FILE to keep the same JSON lines on disk.
+    # Rotating so an unattended process cannot fill the volume.
+    log_file = os.environ.get("LOG_FILE")
+    if log_file:
+        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=int(os.environ.get("LOG_FILE_MAX_BYTES", 10 * 1024 * 1024)),
+            backupCount=int(os.environ.get("LOG_FILE_BACKUPS", 5)),
+        )
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
 
     # Configure the root logger so every `logging.getLogger(__name__)` in the
-    # app inherits this handler and level with no per-module setup.
+    # app inherits these handlers and level with no per-module setup.
     root = logging.getLogger()
-    root.handlers = [handler]
+    root.handlers = handlers
     root.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 
