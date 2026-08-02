@@ -1,5 +1,4 @@
-from flask import Blueprint, current_app, jsonify, request
-from flask_login import current_user
+from flask import Blueprint, current_app, g, jsonify, request
 
 from app.auth import admin_required
 from app.database import db
@@ -62,7 +61,7 @@ def create_loan():
 
     current_app.extensions["posthog_client"].capture(
         "loan_created",
-        distinct_id=str(current_user.id),
-        properties={"creation_source": "api", "actor_role": current_user.role},
+        distinct_id=str(g.user.id),
+        properties={"creation_source": "api", "actor_role": g.user.role},
     )
     return jsonify(loan.to_dict()), 201

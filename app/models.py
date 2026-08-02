@@ -1,6 +1,5 @@
 import datetime
 
-from flask_login import UserMixin
 from peewee import (
     JOIN,
     BooleanField,
@@ -60,7 +59,7 @@ class BaseModel(Model):
         database = db
 
 
-class User(UserMixin, BaseModel):
+class User(BaseModel):
     name = CharField()
     email = CharField(unique=True)
     password_hash = CharField(null=True)

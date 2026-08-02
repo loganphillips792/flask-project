@@ -8,6 +8,11 @@ from werkzeug.datastructures import CallbackDict
 from app.models import Session as SessionModel
 
 
+def utcnow_naive():
+    """Naive UTC now, matching how expiry is stored in the session table."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
 class ServerSideSession(CallbackDict, SessionMixin):
     """A session whose contents live in the database, not the cookie."""
 
@@ -39,7 +44,7 @@ class PeeweeSessionInterface(SessionInterface):
         if record is None:
             return self._new_session()
 
-        if record.expiry is not None and record.expiry < datetime.datetime.now():
+        if record.expiry is not None and record.expiry < utcnow_naive():
             record.delete_instance()
             return self._new_session()
 
@@ -62,14 +67,21 @@ class PeeweeSessionInterface(SessionInterface):
             return
 
         expiry = self.get_expiration_time(app, session)
+        # Stored naive-UTC: peewee round-trips naive datetimes cleanly, and it
+        # keeps open_session's comparison from mixing aware and naive values.
+        db_expiry = (
+            expiry.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            if expiry is not None
+            else None
+        )
         data = self.serializer.dumps(dict(session))
 
         record = SessionModel.get_or_none(SessionModel.sid == session.sid)
         if record is None:
-            SessionModel.create(sid=session.sid, data=data, expiry=expiry)
+            SessionModel.create(sid=session.sid, data=data, expiry=db_expiry)
         else:
             record.data = data
-            record.expiry = expiry
+            record.expiry = db_expiry
             record.save()
 
         response.set_cookie(

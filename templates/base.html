@@ -214,7 +214,7 @@
   {# Anonymous visitors only ever see the login page, and both book links are
      admin-only, so the nav is scoped accordingly rather than offering links
      that would 403. #}
-  {% if current_user.is_authenticated %}
+  {% if current_user %}
     <nav class="nav">
       <span class="brand">Library</span>
       <a href="{{ url_for('auth.dashboard') }}"
