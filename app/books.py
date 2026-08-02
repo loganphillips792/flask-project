@@ -7,12 +7,12 @@ from flask import (
     abort,
     current_app,
     flash,
+    g,
     redirect,
     render_template,
     request,
     url_for,
 )
-from flask_login import current_user
 from peewee import IntegrityError
 
 from app.auth import admin_required
@@ -26,7 +26,7 @@ books = Blueprint("books", __name__, template_folder="../templates")
 @books.get("/books")
 @admin_required
 def index():
-    logger.info(f"admin user {current_user.email} is viewing all books")
+    logger.info(f"admin user {g.user.email} is viewing all books")
     return render_template("books.html", books=books_with_availability())
 
 
@@ -71,10 +71,10 @@ def create():
 
     current_app.extensions["posthog_client"].capture(
         "book_created",
-        distinct_id=str(current_user.id),
-        properties={"creation_source": "dashboard", "actor_role": current_user.role},
+        distinct_id=str(g.user.id),
+        properties={"creation_source": "dashboard", "actor_role": g.user.role},
     )
-    logger.info(f"admin user {current_user.email} added book {book.id} ({isbn})")
+    logger.info(f"admin user {g.user.email} added book {book.id} ({isbn})")
     flash(f'Added "{book.title}" by {book.author}.', "success")
     # Redirect rather than render: a refresh would otherwise re-create the book.
     return redirect(url_for("books.index"))
@@ -110,10 +110,10 @@ def return_loan(loan_id):
         loan.mark_returned()
         current_app.extensions["posthog_client"].capture(
             "loan_returned",
-            distinct_id=str(current_user.id),
-            properties={"actor_role": current_user.role},
+            distinct_id=str(g.user.id),
+            properties={"actor_role": g.user.role},
         )
-        logger.info(f"admin user {current_user.email} marked loan {loan.id} returned")
+        logger.info(f"admin user {g.user.email} marked loan {loan.id} returned")
         flash(f'Marked "{loan.book.title}" returned from {loan.user.name}.', "success")
 
     # Redirect rather than render: a refresh would otherwise re-submit.

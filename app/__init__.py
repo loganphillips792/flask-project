@@ -1,20 +1,29 @@
 import atexit
+import datetime
 import os
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-from flask import Flask
-from flask_login import current_user
+from flask import Flask, g
 from posthog import Posthog
 
 from app.database import db
-from app.models import MODELS, Book, User
+from app.models import MODELS, Book, Session, User
 
 
 def create_app():
     load_dotenv()
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+    # PeeweeSessionInterface reads these when it sets the sid cookie, and
+    # PERMANENT_SESSION_LIFETIME becomes the DB row's expiry for logins.
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        # Off by default so plain-http local dev still gets a cookie.
+        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE") == "1",
+        PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=14),
+    )
 
     posthog_client = Posthog(
         os.environ["POSTHOG_PROJECT_TOKEN"],
@@ -27,6 +36,17 @@ def create_app():
     # Expose the public project token to templates so posthog-js (in base.html)
     # can capture client-side $pageview events — the basis for unique-visitor
     # analytics, including anonymous, logged-out visitors the Python SDK never sees.
+    # Templates say `current_user` rather than reaching into Flask's `g`
+    # internal; getattr because error pages can render before the
+    # before_app_request hook that sets g.user has run.
+    # These functions run before rendering a template. The keys of the returned dict
+    # are added as variables available in the template.This is available on both app
+    # and blueprint objects. When used on an app, this is called for every rendered
+    # template. When used on a blueprint, this is called for templates rendered from the blueprint’s views
+    @app.context_processor
+    def inject_current_user():
+        return {"current_user": getattr(g, "user", None)}
+
     @app.context_processor
     def inject_posthog_config():
         return {
@@ -46,15 +66,18 @@ def create_app():
         """
         if value is None:
             return "—"
-        tz = ZoneInfo(getattr(current_user, "timezone", None) or "UTC")
+        # getattr, not g.user: error handlers can render before the
+        # before_request hook that sets g.user has run.
+        user = getattr(g, "user", None)
+        tz = ZoneInfo(user.timezone if user else "UTC")
         aware = value.astimezone() if value.tzinfo is None else value
-        if getattr(current_user, "time_format", "12") == "24":
+        if (user.time_format if user else "12") == "24":
             pattern = "%Y-%m-%d %H:%M"
         else:
             pattern = "%Y-%m-%d %I:%M %p"
         return aware.astimezone(tz).strftime(pattern)
 
-    from app.auth import auth, login_manager
+    from app.auth import auth
     from app.books import books
     from app.observability import init_observability
     from app.routes import api, health
@@ -62,7 +85,12 @@ def create_app():
 
     app.session_interface = PeeweeSessionInterface()
 
-    login_manager.init_app(app)
+    # Registered before the blueprints so it runs ahead of auth's
+    # before_app_request user loader.
+    @app.before_request
+    def open_connection():
+        db.connect(reuse_if_open=True)
+
     app.register_blueprint(api)
     app.register_blueprint(auth)
     app.register_blueprint(books)
@@ -75,10 +103,6 @@ def create_app():
     with db:
         db.create_tables(MODELS, safe=True)
         ensure_schema()
-
-    @app.before_request
-    def open_connection():
-        db.connect(reuse_if_open=True)
 
     @app.teardown_request
     def close_connection(exc):
@@ -125,6 +149,22 @@ def ensure_schema():
     for table, column, ddl in COLUMN_MIGRATIONS:
         if column not in {existing.name for existing in db.get_columns(table)}:
             db.execute_sql(ddl)
+    purge_expired_sessions()
+
+
+def purge_expired_sessions():
+    """Delete session rows that have expired (or never got an expiry).
+
+    open_session only deletes an expired row when that exact sid comes back,
+    so abandoned sessions would otherwise accumulate forever. NULL expiry rows
+    are browser-session leftovers from before logins were permanent; dropping
+    them on restart matches how a browser-session cookie behaves anyway.
+    """
+    from app.session import utcnow_naive
+
+    Session.delete().where(
+        Session.expiry.is_null() | (Session.expiry < utcnow_naive())
+    ).execute()
 
 
 DEMO_PASSWORD = "password"

@@ -7,18 +7,12 @@ from flask import (
     abort,
     current_app,
     flash,
+    g,
     redirect,
     render_template,
     request,
     session,
     url_for,
-)
-from flask_login import (
-    LoginManager,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
 )
 from app.database import db
 from app.models import (
@@ -33,10 +27,25 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
-login_manager = LoginManager()
-login_manager.login_view = "auth.login"
-
 auth = Blueprint("auth", __name__, template_folder="../templates")
+
+
+@auth.before_app_request
+def load_logged_in_user():
+    user_id = session.get("user_id")
+    g.user = User.get_or_none(User.id == user_id) if user_id else None
+
+
+def login_required(view):
+    """Redirect anonymous requests to the login page, preserving the target."""
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if g.user is None:
+            return redirect(url_for("auth.login", next=request.full_path))
+        return view(*args, **kwargs)
+
+    return wrapped
 
 
 def admin_required(view):
@@ -49,16 +58,11 @@ def admin_required(view):
     @wraps(view)
     @login_required
     def wrapped(*args, **kwargs):
-        if getattr(current_user, "role", None) != "admin":
+        if g.user.role != "admin":
             abort(403)
         return view(*args, **kwargs)
 
     return wrapped
-
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.get_or_none(User.id == int(user_id))
 
 
 @auth.get("/")
@@ -73,7 +77,10 @@ def login():
         password = request.form.get("password", "")
         user = User.get_or_none(User.email == email)
         if user is not None and user.check_password(password):
-            login_user(user)
+            # Fresh session on login so nothing set pre-auth carries over.
+            session.clear()
+            session["user_id"] = user.id
+            session.permanent = True
             posthog_client = current_app.extensions["posthog_client"]
             posthog_client.set(
                 distinct_id=str(user.id),
@@ -85,6 +92,11 @@ def login():
                 properties={"login_method": "password", "role": user.role},
             )
             session["lucky_number"] = random.randint(1, 100)
+            # Only follow same-site relative paths: an absolute URL here would
+            # be an open-redirect hole.
+            nxt = request.args.get("next")
+            if nxt and nxt.startswith("/") and not nxt.startswith("//"):
+                return redirect(nxt)
             return redirect(url_for("auth.dashboard"))
         return render_template("login.html", error="Invalid email or password.")
     return render_template("login.html")
@@ -124,10 +136,10 @@ def create_dashboard_loan():
 
     current_app.extensions["posthog_client"].capture(
         "loan_created",
-        distinct_id=str(current_user.id),
-        properties={"creation_source": "dashboard", "actor_role": current_user.role},
+        distinct_id=str(g.user.id),
+        properties={"creation_source": "dashboard", "actor_role": g.user.role},
     )
-    logger.info(f"user {current_user.id} has created a loan for user {user.id}")
+    logger.info(f"user {g.user.id} has created a loan for user {user.id}")
     flash(f'Loaned "{book.title}" to {user.name} — due {loan.due_date}.', "success")
     # Redirect rather than render: a refresh would otherwise re-create the loan.
     return redirect(url_for("auth.dashboard"))
@@ -152,16 +164,16 @@ def update_settings():
         flash("Pick a valid timezone and time format.", "error")
         return redirect(url_for("auth.settings"))
 
-    current_user.timezone = timezone
-    current_user.time_format = time_format
-    current_user.save()
+    g.user.timezone = timezone
+    g.user.time_format = time_format
+    g.user.save()
 
     current_app.extensions["posthog_client"].capture(
         "settings_updated",
-        distinct_id=str(current_user.id),
+        distinct_id=str(g.user.id),
         properties={"timezone": timezone, "time_format": time_format},
     )
-    logger.info(f"user {current_user.id} set timezone {timezone} and {time_format}-hour time")
+    logger.info(f"user {g.user.id} set timezone {timezone} and {time_format}-hour time")
     flash("Settings saved.", "success")
     # Redirect rather than render: a refresh would otherwise re-submit the form.
     return redirect(url_for("auth.settings"))
@@ -170,5 +182,5 @@ def update_settings():
 @auth.get("/logout")
 @login_required
 def logout():
-    logout_user()
+    session.clear()
     return redirect(url_for("auth.login"))

@@ -7,7 +7,7 @@ A small Flask app demonstrating a JSON API for a library, using [peewee](https:/
 ```
 app/
 ├── __init__.py      # create_app() application factory + init-db CLI command
-├── auth.py          # login/logout/dashboard blueprint (flask-login)
+├── auth.py          # login/logout/dashboard blueprint (session-cookie auth, no extension)
 ├── database.py      # peewee SqliteDatabase instance
 ├── models.py        # User, Book, Loan, Session models
 ├── observability.py # metrics, JSON logging and tracing setup
@@ -55,7 +55,7 @@ The dev server starts on http://127.0.0.1:5001. The SQLite database is stored in
 
 ## Users and roles
 
-Every user has a `role` field (`app/models.py`) that is either `member` (the default for new users) or `admin`. Authentication is handled by flask-login; the role check itself lives in the `admin_required` decorator in `app/auth.py`, which stacks `@login_required` so anonymous requests get redirected to the login page while a logged-in non-admin gets a `403`.
+Every user has a `role` field (`app/models.py`) that is either `member` (the default for new users) or `admin`. Authentication is hand-rolled on Flask's `session`/`g` — no auth extension. Logging in stores `user_id` in the session, and a `before_app_request` hook in `app/auth.py` loads the user onto `g.user` for each request. Sessions themselves are server-side: the custom `PeeweeSessionInterface` (`app/session.py`) keeps the session contents in the SQLite `session` table and puts only a random session id in the cookie, so a login can be revoked by deleting its row. Logged-in sessions expire after 14 days (`PERMANENT_SESSION_LIFETIME`), and expired rows are purged on startup. The role check itself lives in the `admin_required` decorator in `app/auth.py`, which stacks `@login_required` so anonymous requests get redirected to the login page while a logged-in non-admin gets a `403`.
 
 ### Seeded accounts
 
