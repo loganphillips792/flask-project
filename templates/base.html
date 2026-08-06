@@ -211,17 +211,18 @@
   </style>
 </head>
 <body>
-  {# Anonymous visitors only ever see the login page, and both book links are
-     admin-only, so the nav is scoped accordingly rather than offering links
-     that would 403. #}
+  {# Anonymous visitors only ever see the login page, and the book links mirror
+     the routes' role gates, so the nav never offers a link that would 403. #}
   {% if current_user %}
     <nav class="nav">
       <span class="brand">Library</span>
       <a href="{{ url_for('auth.dashboard') }}"
          class="{{ 'active' if request.endpoint == 'auth.dashboard' }}">Dashboard</a>
-      {% if current_user.is_admin %}
+      {% if current_user.has_role('admin', 'librarian') %}
         <a href="{{ url_for('books.index') }}"
            class="{{ 'active' if request.endpoint in ['books.index', 'books.loans'] }}">View all books</a>
+      {% endif %}
+      {% if current_user.is_admin %}
         <a href="{{ url_for('books.new') }}"
            class="{{ 'active' if request.endpoint == 'books.new' }}">Create new book</a>
       {% endif %}

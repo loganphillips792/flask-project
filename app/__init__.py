@@ -123,33 +123,37 @@ def create_app():
     return app
 
 
-# Plain ALTER statements: SQLite accepts a NOT NULL column when it carries a
-# non-null default, and backfills existing rows with it. Deliberately not
-# playhouse.migrate — its add_column rebuilds the table to apply NOT NULL, and
-# the rebuild fails the foreign_keys pragma via loan.book_id.
-COLUMN_MIGRATIONS = [
-    # Predates the quantity work: databases created before roles existed have no
-    # user.role, and every login fails on `no such column: t1.role`.
-    ("user", "role", "ALTER TABLE \"user\" ADD COLUMN role VARCHAR(255) NOT NULL DEFAULT 'member'"),
-    ("book", "quantity", "ALTER TABLE book ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1"),
-    ("loan", "returned_at", "ALTER TABLE loan ADD COLUMN returned_at DATETIME"),
-    ("user", "timezone", "ALTER TABLE \"user\" ADD COLUMN timezone VARCHAR(255) NOT NULL DEFAULT 'UTC'"),
-    ("user", "time_format", "ALTER TABLE \"user\" ADD COLUMN time_format VARCHAR(255) NOT NULL DEFAULT '12'"),
-]
-
-
 def ensure_schema():
-    """Add columns that `create_tables(safe=True)` can't retrofit.
+    """Post-create_tables fixups that run on every startup.
 
-    create_tables only creates *missing tables* — it never alters an existing
-    one, so a database created before a field was added keeps the old columns
-    and every query for the new one fails. Runs on every startup and is a no-op
-    once applied.
+    The schema itself comes entirely from the models via create_tables — this
+    handles the data that has to exist for the app to work: the role catalog,
+    a membership for every user, and session hygiene. Idempotent throughout.
     """
-    for table, column, ddl in COLUMN_MIGRATIONS:
-        if column not in {existing.name for existing in db.get_columns(table)}:
-            db.execute_sql(ddl)
+    ensure_roles()
     purge_expired_sessions()
+
+
+def ensure_roles():
+    """Seed the role catalog and guarantee every user holds at least one role.
+
+    The sweep covers users created outside seed_data (e.g. via the API), which
+    otherwise would hold no roles at all; "member" is the same default the old
+    role column carried. Idempotent: get_or_create plus the unique (user, role)
+    index.
+    """
+    from peewee import fn
+
+    from app.models import Role, RoleMembership
+
+    for name in ("admin", "member"):
+        Role.get_or_create(name=name)
+    member = Role.get(Role.name == "member")
+    missing = User.select().where(
+        ~fn.EXISTS(RoleMembership.select().where(RoleMembership.user == User.id))
+    )
+    for user in missing:
+        RoleMembership.get_or_create(user=user, role=member)
 
 
 def purge_expired_sessions():
@@ -171,9 +175,12 @@ DEMO_PASSWORD = "password"
 
 
 def seed_data():
+    from app.models import Role, RoleMembership
+
     users = [
-        {"name": "Admin", "email": "admin@example.com", "role": "admin"},
-        {"name": "Ada Lovelace", "email": "ada@example.com"},
+        {"name": "Admin", "email": "admin@example.com", "roles": ["admin"]},
+        # Two roles on purpose: demo data for the multi-role membership design.
+        {"name": "Ada Lovelace", "email": "ada@example.com", "roles": ["member", "librarian"]},
         {"name": "Grace Hopper", "email": "grace@example.com"},
         {"name": "Alan Turing", "email": "alan@example.com"},
     ]
@@ -184,14 +191,15 @@ def seed_data():
         {"title": "The Mythical Man-Month", "author": "Fred Brooks", "isbn": "9780201835953", "quantity": 1},
     ]
     for user in users:
-        role = user.get("role", "member")
         obj, _ = User.get_or_create(
             email=user["email"],
-            defaults={"name": user["name"], "role": role},
+            defaults={"name": user["name"]},
         )
-        obj.role = role
         obj.set_password(DEMO_PASSWORD)
         obj.save()
+        for role_name in user.get("roles", ["member"]):
+            role, _ = Role.get_or_create(name=role_name)
+            RoleMembership.get_or_create(user=obj, role=role)
     for book in books:
         obj, _ = Book.get_or_create(
             isbn=book["isbn"],

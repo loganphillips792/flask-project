@@ -34,6 +34,10 @@ auth = Blueprint("auth", __name__, template_folder="../templates")
 def load_logged_in_user():
     user_id = session.get("user_id")
     g.user = User.get_or_none(User.id == user_id) if user_id else None
+    # Queried fresh each request rather than cached in the session, so a role
+    # grant or revocation applies immediately without a re-login. Also primes
+    # the instance cache behind is_admin/primary_role for templates.
+    g.user_roles = g.user.get_role_names() if g.user else set()
 
 
 def login_required(view):
@@ -48,21 +52,27 @@ def login_required(view):
     return wrapped
 
 
-def admin_required(view):
-    """Allow only authenticated users whose role is 'admin'.
+def role_required(*role_names):
+    """Allow only authenticated users holding at least one of the given roles.
 
     Stacks @login_required so anonymous requests still hit the login flow;
-    an authenticated non-admin gets a 403.
+    an authenticated user without any of the roles gets a 403.
     """
 
-    @wraps(view)
-    @login_required
-    def wrapped(*args, **kwargs):
-        if g.user.role != "admin":
-            abort(403)
-        return view(*args, **kwargs)
+    def decorator(view):
+        @wraps(view)
+        @login_required
+        def wrapped(*args, **kwargs):
+            if not g.user_roles.intersection(role_names):
+                abort(403)
+            return view(*args, **kwargs)
 
-    return wrapped
+        return wrapped
+
+    return decorator
+
+
+admin_required = role_required("admin")
 
 
 @auth.get("/")
@@ -84,12 +94,12 @@ def login():
             posthog_client = current_app.extensions["posthog_client"]
             posthog_client.set(
                 distinct_id=str(user.id),
-                properties={"email": user.email, "name": user.name, "role": user.role},
+                properties={"email": user.email, "name": user.name, "role": user.primary_role},
             )
             posthog_client.capture(
                 "user_logged_in",
                 distinct_id=str(user.id),
-                properties={"login_method": "password", "role": user.role},
+                properties={"login_method": "password", "role": user.primary_role},
             )
             session["lucky_number"] = random.randint(1, 100)
             # Only follow same-site relative paths: an absolute URL here would
@@ -137,7 +147,7 @@ def create_dashboard_loan():
     current_app.extensions["posthog_client"].capture(
         "loan_created",
         distinct_id=str(g.user.id),
-        properties={"creation_source": "dashboard", "actor_role": g.user.role},
+        properties={"creation_source": "dashboard", "actor_role": g.user.primary_role},
     )
     logger.info(f"user {g.user.id} has created a loan for user {user.id}")
     flash(f'Loaned "{book.title}" to {user.name} — due {loan.due_date}.', "success")
