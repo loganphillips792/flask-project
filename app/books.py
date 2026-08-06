@@ -1,4 +1,5 @@
-"""Admin-only catalog views: browsing books, adding them, and closing loans."""
+"""Catalog views: browsing books (admins and librarians), adding them and
+closing loans (admins only)."""
 
 import logging
 
@@ -15,7 +16,7 @@ from flask import (
 )
 from peewee import IntegrityError
 
-from app.auth import admin_required
+from app.auth import admin_required, role_required
 from app.models import Book, Loan, User, books_with_availability
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,9 @@ books = Blueprint("books", __name__, template_folder="../templates")
 
 
 @books.get("/books")
-@admin_required
+@role_required("admin", "librarian")
 def index():
-    logger.info(f"admin user {g.user.email} is viewing all books")
+    logger.info(f"user {g.user.email} is viewing all books")
     return render_template("books.html", books=books_with_availability())
 
 
@@ -72,7 +73,7 @@ def create():
     current_app.extensions["posthog_client"].capture(
         "book_created",
         distinct_id=str(g.user.id),
-        properties={"creation_source": "dashboard", "actor_role": g.user.role},
+        properties={"creation_source": "dashboard", "actor_role": g.user.primary_role},
     )
     logger.info(f"admin user {g.user.email} added book {book.id} ({isbn})")
     flash(f'Added "{book.title}" by {book.author}.', "success")
@@ -145,7 +146,7 @@ def update(book_id):
     current_app.extensions["posthog_client"].capture(
         "book_updated",
         distinct_id=str(g.user.id),
-        properties={"actor_role": g.user.role},
+        properties={"actor_role": g.user.primary_role},
     )
     logger.info(f"admin user {g.user.email} updated book {book.id} ({isbn})")
     flash(f'Updated "{book.title}".', "success")
@@ -183,7 +184,7 @@ def return_loan(loan_id):
         current_app.extensions["posthog_client"].capture(
             "loan_returned",
             distinct_id=str(g.user.id),
-            properties={"actor_role": g.user.role},
+            properties={"actor_role": g.user.primary_role},
         )
         logger.info(f"admin user {g.user.email} marked loan {loan.id} returned")
         flash(f'Marked "{loan.book.title}" returned from {loan.user.name}.', "success")

@@ -62,6 +62,6 @@ def create_loan():
     current_app.extensions["posthog_client"].capture(
         "loan_created",
         distinct_id=str(g.user.id),
-        properties={"creation_source": "api", "actor_role": g.user.role},
+        properties={"creation_source": "api", "actor_role": g.user.primary_role},
     )
     return jsonify(loan.to_dict()), 201

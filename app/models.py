@@ -63,13 +63,42 @@ class User(BaseModel):
     name = CharField()
     email = CharField(unique=True)
     password_hash = CharField(null=True)
-    role = CharField(default="member")
     timezone = CharField(default="UTC")
     time_format = CharField(default="12")  # "12" or "24"
 
+    def get_role_names(self):
+        """The user's role names, queried once per instance.
+
+        Cached on the instance, not globally: g.user is a fresh instance each
+        request, so the cache lives exactly one request.
+        """
+        if not hasattr(self, "_role_names"):
+            query = (
+                Role.select(Role.name)
+                .join(RoleMembership)
+                .where(RoleMembership.user == self)
+            )
+            self._role_names = {role.name for role in query}
+        return self._role_names
+
+    def has_role(self, *names):
+        return bool(self.get_role_names().intersection(names))
+
     @property
     def is_admin(self):
-        return self.role == "admin"
+        return self.has_role("admin")
+
+    @property
+    def primary_role(self):
+        """A single display/analytics role for a multi-role user.
+
+        Admin outranks everything; otherwise the first role alphabetically,
+        falling back to "member" for a user with no memberships at all.
+        """
+        roles = self.get_role_names()
+        if "admin" in roles:
+            return "admin"
+        return min(roles) if roles else "member"
 
     @property
     def initials(self):
@@ -96,10 +125,24 @@ class User(BaseModel):
             "id": self.id,
             "name": self.name,
             "email": self.email,
-            "role": self.role,
+            "role": self.primary_role,
+            "roles": sorted(self.get_role_names()),
             "timezone": self.timezone,
             "time_format": self.time_format,
         }
+
+
+class Role(BaseModel):
+    name = CharField(unique=True)
+
+
+class RoleMembership(BaseModel):
+    user = ForeignKeyField(User, backref="role_memberships", on_delete="CASCADE")
+    role = ForeignKeyField(Role, backref="memberships")
+
+    class Meta:
+        # Unique pair, so re-granting a role is a no-op rather than a duplicate.
+        indexes = ((("user", "role"), True),)
 
 
 class Book(BaseModel):
@@ -181,4 +224,4 @@ def copies_on_loan(book):
     return Loan.select().where((Loan.book == book) & (Loan.returned == False)).count()
 
 
-MODELS = [User, Book, Loan, Session]
+MODELS = [User, Role, RoleMembership, Book, Loan, Session]
