@@ -334,6 +334,36 @@ sum(count_over_time({service_name="flask-app"} |= "created a loan" [5m]))
 
 Reach for the `|=` line filter by default — it matches the substring before any JSON parsing, so it's the cheapest option. Add `| json` only when you want individual fields (`trace_id`, `uri`, `logger`) broken out in the table, or need to filter on one.
 
+## Load testing with k6
+
+Load tests live in `k6/` and run as an opt-in Docker Compose service (`profiles: [loadtest]`), so a plain `docker compose up` never starts them. k6 streams its metrics into the existing Prometheus via remote write, and Grafana provisions a **k6 Prometheus** dashboard (from `observability/grafana/provisioning/dashboards/k6-prometheus.json`) next to the app dashboards.
+
+With the stack up (`docker compose up --build -d`), run the default smoke test against the public endpoints:
+
+```bash
+docker compose --profile loadtest run --rm k6
+```
+
+Pick a script and intensity with env vars:
+
+```bash
+K6_SCRIPT=browse.js MODE=load docker compose --profile loadtest run --rm k6
+K6_SCRIPT=writes.js docker compose --profile loadtest run --rm k6
+```
+
+- **Scripts** — `public.js` (`/health`, `/api/loans`; no auth), `browse.js` (login, then `/dashboard`, `/settings`, `/books` with the session cookie), `writes.js` (`POST /api/loans` then return the loan in the same iteration; 409s are counted in a `loan_conflicts` metric, not failed).
+- **Modes** — `smoke` (1 VU, 30s — the default), `load` (ramp to 10 VUs over 5m), `stress` (ramp to 50 VUs). Shared scenario presets and the login helper are in `k6/helpers.js`.
+
+Results appear live in Grafana (<http://localhost:3001>) on the **k6 Prometheus** dashboard; filter runs with its `testid` variable. The end-of-run summary also prints to the terminal.
+
+To run against a locally running app instead (requires [k6 installed](https://grafana.com/docs/k6/latest/set-up/install-k6/), e.g. `brew install k6`):
+
+```bash
+k6 run -e BASE_URL=http://127.0.0.1:5001 k6/public.js
+```
+
+Two caveats: write throughput caps out low by design — SQLite plus a single gunicorn worker serializes writes, and `writes.js` exists to measure that ceiling, not to pass at high VU counts. And although `writes.js` returns each loan it creates, returned loan rows still accumulate slowly; reset the database with `docker compose down -v`.
+
 ## API endpoints
 
 ### Create a loan — `POST /api/loans`
