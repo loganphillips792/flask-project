@@ -6,6 +6,8 @@ library.db
 library.db-wal
 library.db-shm
 container-library.db
+container-library.db-wal
+container-library.db-shm
 
 venv/
 .venv/

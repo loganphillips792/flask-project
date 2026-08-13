@@ -31,4 +31,6 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # --workers 1 is load-bearing: prometheus_client holds counters in per-process
 # memory, so multiple workers would make /metrics return whichever worker
 # happened to serve the scrape. It also matches SQLite's single-writer model.
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--threads", "4", "run:app"]
+# --threads 32: every open chat WebSocket pins a gthread thread for its whole
+# lifetime, so the pool bounds concurrent chatters (plus in-flight requests).
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "1", "--threads", "32", "run:app"]

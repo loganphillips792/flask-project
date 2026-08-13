@@ -79,6 +79,7 @@ def create_app():
 
     from app.auth import auth
     from app.books import books
+    from app.chat import chat, sock
     from app.observability import init_observability
     from app.routes import api, health
     from app.session import PeeweeSessionInterface
@@ -94,7 +95,12 @@ def create_app():
     app.register_blueprint(api)
     app.register_blueprint(auth)
     app.register_blueprint(books)
+    app.register_blueprint(chat)
     app.register_blueprint(health)
+    # Pings keep idle sockets alive through proxies and surface dead clients
+    # to the receive() loop instead of leaving them in the broadcast set.
+    app.config["SOCK_SERVER_OPTIONS"] = {"ping_interval": 25}
+    sock.init_app(app)
 
     # After the blueprints: PrometheusMetrics labels by endpoint, so it needs
     # to see the registered views.
