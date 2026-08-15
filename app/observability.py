@@ -22,8 +22,10 @@ from app.logging import init_logging
 SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "flask-app")
 
 # Prometheus scrapes /metrics every 10s. Without these exclusions the scrape
-# itself generates a span and a log line, drowning real traffic.
-EXCLUDED_PATHS = ["/metrics", "/health"]
+# itself generates a span and a log line, drowning real traffic. /chat/ws is
+# excluded because a WebSocket "request" lasts as long as the tab is open —
+# it would emit an hours-long span and wreck the duration histograms.
+EXCLUDED_PATHS = ["/metrics", "/health", "/chat/ws"]
 
 
 def _configure_tracing(app):

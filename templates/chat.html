@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+{% block container_class %}wide{% endblock %}
+{% block content %}
+  <style>
+    .chat-header { display: flex; align-items: baseline; justify-content: space-between; }
+    .chat-status { font-size: 0.75rem; color: #888; font-weight: 600; }
+    .chat-log {
+      max-height: 60vh;
+      min-height: 200px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.25rem 0;
+      margin-bottom: 1rem;
+    }
+    .chat-msg .meta { display: flex; align-items: baseline; gap: 0.5rem; }
+    .chat-msg .who { font-weight: 600; font-size: 0.9rem; }
+    .chat-msg .when { color: #888; font-size: 0.75rem; }
+    /* pre-wrap keeps intentional line breaks; break-word stops a long paste
+       from forcing the card wider than the container. */
+    .chat-msg .body { margin: 0.1rem 0 0; white-space: pre-wrap; word-break: break-word; }
+    .chat-form { display: flex; gap: 0.5rem; }
+    .chat-form input { margin-bottom: 0; }
+    .chat-form button { width: auto; padding: 0.65rem 1.25rem; }
+  </style>
+  <div class="card">
+    <div class="chat-header">
+      <h1>Chat</h1>
+      <span class="chat-status" id="chat-status">connecting…</span>
+    </div>
+    <div class="chat-log" id="chat-log"
+         data-tz="{{ current_user.timezone }}"
+         data-fmt="{{ current_user.time_format }}">
+      {% for m in messages %}
+        <div class="chat-msg">
+          <div class="meta">
+            <span class="who">{{ m.user.name }}</span>
+            <span class="when">{{ m.created_at|user_time }}</span>
+          </div>
+          <p class="body">{{ m.body }}</p>
+        </div>
+      {% else %}
+        <p class="empty">No messages yet — say hello!</p>
+      {% endfor %}
+    </div>
+    <form class="chat-form" id="chat-form" autocomplete="off">
+      <input id="chat-input" name="body" maxlength="2000"
+             placeholder="Write a message…" aria-label="Message">
+      <button type="submit">Send</button>
+    </form>
+  </div>
+  <script>
+    (function () {
+      var log = document.getElementById('chat-log');
+      var form = document.getElementById('chat-form');
+      var input = document.getElementById('chat-input');
+      var status = document.getElementById('chat-status');
+      var socket = null;
+      var retryDelay = 1000;
+
+      // Same output shape as the server-side user_time filter, so live
+      // messages match the rendered history. en-CA yields YYYY-MM-DD.
+      var dateFmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: log.dataset.tz, year: 'numeric', month: '2-digit', day: '2-digit'
+      });
+      var timeFmt = new Intl.DateTimeFormat([], {
+        timeZone: log.dataset.tz,
+        hour: log.dataset.fmt === '12' ? 'numeric' : '2-digit',
+        minute: '2-digit',
+        hour12: log.dataset.fmt === '12'
+      });
+
+      function scrollToBottom() { log.scrollTop = log.scrollHeight; }
+
+      function addMessage(name, body) {
+        var empty = log.querySelector('.empty');
+        if (empty) empty.remove();
+        var msg = document.createElement('div');
+        msg.className = 'chat-msg';
+        var meta = document.createElement('div');
+        meta.className = 'meta';
+        var who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = name;
+        var when = document.createElement('span');
+        when.className = 'when';
+        // Formatted at receipt time rather than parsed from the payload: the
+        // server sends a naive local timestamp Date() would misread across
+        // zones, and a live message is at most moments old anyway.
+        var now = new Date();
+        when.textContent = dateFmt.format(now) + ' ' + timeFmt.format(now);
+        meta.appendChild(who);
+        meta.appendChild(when);
+        var text = document.createElement('p');
+        text.className = 'body';
+        text.textContent = body;
+        msg.appendChild(meta);
+        msg.appendChild(text);
+        log.appendChild(msg);
+        scrollToBottom();
+      }
+
+      function connect() {
+        var scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+        socket = new WebSocket(scheme + '://' + location.host + '/chat/ws');
+        socket.onopen = function () {
+          retryDelay = 1000;
+          status.textContent = 'connected';
+        };
+        socket.onmessage = function (event) {
+          var data = JSON.parse(event.data);
+          addMessage(data.name, data.body);
+        };
+        socket.onclose = function (event) {
+          if (event.code === 4403) {
+            status.textContent = 'not allowed';
+            return;
+          }
+          status.textContent = 'reconnecting…';
+          setTimeout(connect, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, 15000);
+        };
+      }
+
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var body = input.value.trim();
+        if (!body || !socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify({ body: body }));
+        input.value = '';
+      });
+
+      connect();
+      scrollToBottom();
+    })();
+  </script>
+{% endblock %}

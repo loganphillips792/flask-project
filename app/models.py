@@ -204,6 +204,21 @@ class Loan(BaseModel):
         }
 
 
+class ChatMessage(BaseModel):
+    user = ForeignKeyField(User, backref="chat_messages", on_delete="CASCADE")
+    body = TextField()
+    # Naive local time, matching Loan.loaned_at; rendered through user_time.
+    created_at = DateTimeField(default=datetime.datetime.now, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user": self.user.to_dict(),
+            "body": self.body,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 def books_with_availability():
     """Every book, annotated with `copies_out` — its outstanding loans.
 
@@ -224,4 +239,4 @@ def copies_on_loan(book):
     return Loan.select().where((Loan.book == book) & (Loan.returned == False)).count()
 
 
-MODELS = [User, Role, RoleMembership, Book, Loan, Session]
+MODELS = [User, Role, RoleMembership, Book, Loan, Session, ChatMessage]

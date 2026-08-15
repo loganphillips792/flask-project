@@ -226,6 +226,10 @@
         <a href="{{ url_for('books.new') }}"
            class="{{ 'active' if request.endpoint == 'books.new' }}">Create new book</a>
       {% endif %}
+      {% if current_user.has_role('member', 'admin') %}
+        <a href="{{ url_for('chat.page') }}"
+           class="{{ 'active' if request.endpoint == 'chat.page' }}">Chat</a>
+      {% endif %}
       {# The current time in the viewer's chosen zone/format; filled in and
          ticked by the script at the end of <body>. #}
       <span class="spacer clock"
