@@ -263,8 +263,11 @@ For faster iteration on app behavior alone, run the dev server directly — `pyt
 To inspect the container's data, either query it live (`curl http://127.0.0.1:5001/api/loans`, or `docker compose exec flask-app python ...`), or copy the file out to open it in a SQLite GUI:
 
 ```bash
-docker compose cp flask-app:/data/library.db ./container-library.db
+docker compose exec flask-app python -c "import sqlite3; sqlite3.connect('/data/library.db').execute('PRAGMA wal_checkpoint(TRUNCATE)')" \
+  && docker compose cp flask-app:/data/library.db ./container-library.db
 ```
+
+The checkpoint line matters: the database runs in WAL mode, so recent commits sit in `/data/library.db-wal` until SQLite folds them into the main file. Copying `library.db` alone silently misses whatever is still in the WAL — rows that are plainly there through the app appear to be "missing" from the copy. The `PRAGMA wal_checkpoint(TRUNCATE)` flushes the WAL first so the copied file is complete. (If your GUI still shows stale data after re-copying, refresh/invalidate its connection — most cache the file.)
 
 That's a point-in-time copy, not a live view. To reset the container's data:
 
