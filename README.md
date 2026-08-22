@@ -352,9 +352,10 @@ Pick a script and intensity with env vars:
 ```bash
 K6_SCRIPT=browse.js MODE=load docker compose --profile loadtest run --rm k6
 K6_SCRIPT=writes.js docker compose --profile loadtest run --rm k6
+K6_SCRIPT=chat.js MODE=load docker compose --profile loadtest run --rm k6
 ```
 
-- **Scripts** — `public.js` (`/health`, `/api/loans`; no auth), `browse.js` (login, then `/dashboard`, `/settings`, `/books` with the session cookie), `writes.js` (`POST /api/loans` then return the loan in the same iteration; 409s are counted in a `loan_conflicts` metric, not failed).
+- **Scripts** — `public.js` (`/health`, `/api/loans`; no auth), `browse.js` (login, then `/dashboard`, `/settings`, `/books` with the session cookie), `writes.js` (`POST /api/loans` then return the loan in the same iteration; 409s are counted in a `loan_conflicts` metric, not failed), `chat.js` (opens WebSockets against `/chat/ws` and loads `/chat`).
 - **Modes** — `smoke` (1 VU, 30s — the default), `load` (ramp to 10 VUs over 5m), `stress` (ramp to 50 VUs). Shared scenario presets and the login helper are in `k6/helpers.js`.
 
 Results appear live in Grafana (<http://localhost:3001>) on the **k6 Prometheus** dashboard; filter runs with its `testid` variable. The end-of-run summary also prints to the terminal.
@@ -366,6 +367,17 @@ k6 run -e BASE_URL=http://127.0.0.1:5001 k6/public.js
 ```
 
 Two caveats: write throughput caps out low by design — SQLite plus a single gunicorn worker serializes writes, and `writes.js` exists to measure that ceiling, not to pass at high VU counts. And although `writes.js` returns each loan it creates, returned loan rows still accumulate slowly; reset the database with `docker compose down -v`.
+
+### Chat
+
+`chat.js` runs two scenarios at once: `chat_socket` opens a WebSocket per VU, posts a message every 2s for 10s, and `chat_page` loads `/chat` so the cost of rendering the 50-message history is measured separately. Tune the socket session with `-e CHAT_SESSION_MS=…` and `-e CHAT_SEND_INTERVAL_MS=…`.
+
+Beyond the built-in `ws_*` metrics it records two custom ones, both thresholded, because the `ws_*` set only covers the handshake and raw frame counts:
+
+- `chat_echo_latency` — send to seeing your own message arrive back on the broadcast. This is the number that describes chat responsiveness; each message carries a `k6-vu<N>-iter<N>` token so a VU can pick its own echo out of everyone else's fan-out.
+- `chat_echo_delivered` — the share of sent messages whose broadcast came back before the socket closed. Anything under 1.0 means dropped fan-out.
+
+The hard ceiling here is threads, not SQLite: gunicorn runs `--workers 1 --threads 32` and flask-sock parks one thread per open socket for its entire lifetime, so sockets are drawn from the same pool that serves HTTP. `chat.js` caps its scenarios at 20 + 5 VUs for that reason — past ~32 concurrent sockets the app stops answering HTTP at all, including k6's own logins, which looks like a hang rather than a clean failure. To probe further, raise `--threads` in the `Dockerfile` `CMD` first. Note also that chat messages are never deleted, so every run grows `chatmessage`; `docker compose down -v` resets it.
 
 ## API endpoints
 
