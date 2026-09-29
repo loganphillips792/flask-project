@@ -413,7 +413,7 @@ Response (`201 Created`):
     "quantity": 3,
     "copies_available": 2
   },
-  "loaned_at": "2026-07-08T12:00:00",
+  "loaned_at": "2026-07-08T12:00:00+00:00",
   "due_date": "2026-07-22",
   "returned": false,
   "returned_at": null

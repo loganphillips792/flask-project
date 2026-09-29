@@ -1,4 +1,5 @@
 import datetime
+from zoneinfo import ZoneInfo
 
 from peewee import (
     JOIN,
@@ -50,8 +51,18 @@ TIMEZONES = [
 TIME_FORMATS = ["12", "24"]
 
 
-def _default_due_date():
-    return datetime.date.today() + datetime.timedelta(days=LOAN_PERIOD_DAYS)
+def utcnow_naive():
+    """Naive UTC now — how every DateTimeField in the app is stored.
+
+    SQLite has no timestamptz, so the convention is: naive values are always
+    UTC, and conversion to a viewer's zone happens only at render time.
+    """
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def iso_utc(value):
+    """ISO 8601 with an explicit +00:00 offset, so API clients can't misread it."""
+    return value.replace(tzinfo=datetime.timezone.utc).isoformat() if value else None
 
 
 class BaseModel(Model):
@@ -181,41 +192,51 @@ class Session(BaseModel):
 class Loan(BaseModel):
     user = ForeignKeyField(User, backref="loans")
     book = ForeignKeyField(Book, backref="loans")
-    loaned_at = DateTimeField(default=datetime.datetime.now)
-    due_date = DateField(default=_default_due_date)
+    loaned_at = DateTimeField(default=utcnow_naive)
+    # A calendar date, not an instant: set in save() from the borrower's zone.
+    due_date = DateField()
     returned = BooleanField(default=False)
     returned_at = DateTimeField(null=True)
 
     def mark_returned(self):
         """Close the loan, keeping the flag and its timestamp in step."""
         self.returned = True
-        self.returned_at = datetime.datetime.now()
+        self.returned_at = utcnow_naive()
         self.save()
+
+    def save(self, *args, **kwargs):
+        # Due LOAN_PERIOD_DAYS after the loan day *on the borrower's calendar*,
+        # so a loan made near midnight isn't due a day early or late for them.
+        if self.due_date is None:
+            loaned = self.loaned_at.replace(tzinfo=datetime.timezone.utc)
+            local_day = loaned.astimezone(ZoneInfo(self.user.timezone)).date()
+            self.due_date = local_day + datetime.timedelta(days=LOAN_PERIOD_DAYS)
+        return super().save(*args, **kwargs)
 
     def to_dict(self):
         return {
             "id": self.id,
             "user": self.user.to_dict(),
             "book": self.book.to_dict(),
-            "loaned_at": self.loaned_at.isoformat(),
+            "loaned_at": iso_utc(self.loaned_at),
             "due_date": self.due_date.isoformat(),
             "returned": self.returned,
-            "returned_at": self.returned_at.isoformat() if self.returned_at else None,
+            "returned_at": iso_utc(self.returned_at),
         }
 
 
 class ChatMessage(BaseModel):
     user = ForeignKeyField(User, backref="chat_messages", on_delete="CASCADE")
     body = TextField()
-    # Naive local time, matching Loan.loaned_at; rendered through user_time.
-    created_at = DateTimeField(default=datetime.datetime.now, index=True)
+    # Naive UTC, like every timestamp; rendered through user_time.
+    created_at = DateTimeField(default=utcnow_naive, index=True)
 
     def to_dict(self):
         return {
             "id": self.id,
             "user": self.user.to_dict(),
             "body": self.body,
-            "created_at": self.created_at.isoformat(),
+            "created_at": iso_utc(self.created_at),
         }
 
 

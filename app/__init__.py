@@ -61,8 +61,8 @@ def create_app():
     def user_time(value):
         """Render a DB timestamp in the viewer's timezone and clock format.
 
-        Loan timestamps are naive `datetime.now()` values — server-local, not
-        UTC — so they're localised to the server zone before being converted.
+        Stored timestamps are naive UTC (see models.utcnow_naive), so a naive
+        value is tagged UTC — never read as server-local — before converting.
         """
         if value is None:
             return "—"
@@ -70,7 +70,7 @@ def create_app():
         # before_request hook that sets g.user has run.
         user = getattr(g, "user", None)
         tz = ZoneInfo(user.timezone if user else "UTC")
-        aware = value.astimezone() if value.tzinfo is None else value
+        aware = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
         if (user.time_format if user else "12") == "24":
             pattern = "%Y-%m-%d %H:%M"
         else:
@@ -137,6 +137,7 @@ def ensure_schema():
     a membership for every user, and session hygiene. Idempotent throughout.
     """
     ensure_roles()
+    convert_local_timestamps_to_utc()
     purge_expired_sessions()
 
 
@@ -162,6 +163,36 @@ def ensure_roles():
         RoleMembership.get_or_create(user=user, role=member)
 
 
+def convert_local_timestamps_to_utc():
+    """One-time rewrite of pre-UTC rows from server-local time to naive UTC.
+
+    Loan and chat timestamps used to be stored as naive `datetime.now()`, and
+    the old user_time filter read them back in the server's current zone. This
+    converts them with that same assumption, so every row keeps displaying the
+    instant it did before. PRAGMA user_version marks it done; in the container
+    (TZ=UTC) the rewrite is a no-op anyway.
+    """
+    from app.models import ChatMessage, Loan
+
+    if db.pragma("user_version") >= 1:
+        return
+
+    def to_utc(value):
+        if value is None:
+            return None
+        return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+    with db.atomic():
+        for loan in Loan.select():
+            loan.loaned_at = to_utc(loan.loaned_at)
+            loan.returned_at = to_utc(loan.returned_at)
+            loan.save(only=[Loan.loaned_at, Loan.returned_at])
+        for message in ChatMessage.select():
+            message.created_at = to_utc(message.created_at)
+            message.save(only=[ChatMessage.created_at])
+        db.pragma("user_version", 1)
+
+
 def purge_expired_sessions():
     """Delete session rows that have expired (or never got an expiry).
 
@@ -170,7 +201,7 @@ def purge_expired_sessions():
     are browser-session leftovers from before logins were permanent; dropping
     them on restart matches how a browser-session cookie behaves anyway.
     """
-    from app.session import utcnow_naive
+    from app.models import utcnow_naive
 
     Session.delete().where(
         Session.expiry.is_null() | (Session.expiry < utcnow_naive())
