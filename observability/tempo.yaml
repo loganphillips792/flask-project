@@ -38,6 +38,12 @@ metrics_generator:
   traces_storage:
     path: /var/tempo/generator/traces
   processor:
+    span_metrics:
+      # Extra labels on traces_spanmetrics_* (dots become underscores), for the
+      # dashboard's per-endpoint table. The Flask instrumentation still emits
+      # the old semconv names. http.route is the URL rule (/books/<int:book_id>),
+      # not the raw path, so cardinality stays bounded.
+      dimensions: [http.route, http.method, http.status_code, http.scheme]
     local_blocks:
       filter_server_spans: false
       flush_to_storage: true

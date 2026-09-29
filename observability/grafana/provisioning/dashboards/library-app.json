@@ -179,34 +179,68 @@
     },
     {
       "id": 8,
-      "type": "bargauge",
+      "type": "table",
       "title": "Hits by endpoint",
-      "description": "Requests per Flask endpoint over the selected time range. Uses the duration histogram's _count: flask_http_request_total carries no endpoint label.",
+      "description": "Server spans over the selected range, from Tempo span metrics (dimensions set in tempo.yaml). URL is the Flask route rule, not the raw path.",
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
       "options": {
-        "orientation": "horizontal",
-        "displayMode": "basic",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [{ "displayName": "Calls", "desc": true }]
       },
       "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "min": 0,
-          "color": { "mode": "continuous-BlPu" }
-        },
-        "overrides": []
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Calls" },
+            "properties": [{ "id": "unit", "value": "short" }, { "id": "decimals", "value": 0 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Avg Duration" },
+            "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 1 }]
+          }
+        ]
       },
       "targets": [
         {
-          "refId": "A",
+          "refId": "calls",
           "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
-          "expr": "sort_desc(round(sum by (endpoint) (increase(flask_http_request_duration_seconds_count{job=\"flask-app\"}[$__range]))))",
-          "legendFormat": "{{endpoint}}",
+          "expr": "round(sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_calls_total{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range]))) > 0",
+          "format": "table",
           "instant": true
+        },
+        {
+          "refId": "avg",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+          "expr": "sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_latency_sum{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range])) / sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_latency_count{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range])) > 0",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": {
+              "http_route": 0,
+              "http_method": 1,
+              "http_status_code": 2,
+              "http_scheme": 3,
+              "Value #calls": 4,
+              "Value #avg": 5
+            },
+            "renameByName": {
+              "http_route": "URL",
+              "http_method": "Method",
+              "http_status_code": "Status",
+              "http_scheme": "Scheme",
+              "Value #calls": "Calls",
+              "Value #avg": "Avg Duration"
+            }
+          }
         }
       ]
     },
