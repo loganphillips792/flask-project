@@ -44,6 +44,28 @@ services:
     networks:
       - library-network
 
+  # Opt-in load testing: plain `docker compose up` ignores this service.
+  # Run with: docker compose --profile loadtest run --rm k6
+  # Pick a script/intensity: K6_SCRIPT=writes.js MODE=load docker compose --profile loadtest run --rm k6
+  k6:
+    image: grafana/k6:latest
+    profiles: [loadtest]
+    depends_on:
+      - flask-app
+      - prometheus
+    volumes:
+      - ./k6:/scripts:ro
+    environment:
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+      # Required for percentile panels: the remote-write output emits one gauge
+      # series per stat, not histograms.
+      - K6_PROMETHEUS_RW_TREND_STATS=p(95),p(99),min,max,avg,med
+      - BASE_URL=http://flask-app:5001
+      - MODE=${MODE-smoke}
+    command: run -o experimental-prometheus-rw --tag testid=local /scripts/${K6_SCRIPT-public.js}
+    networks:
+      - library-network
+
 volumes:
   library-data:
 
