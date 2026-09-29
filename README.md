@@ -37,6 +37,7 @@ Requires Python 3.10+.
    ```bash
    python3 -m venv venv
    source venv/bin/activate   # on Windows: venv\Scripts\activate
+   which pip # should show something like `/Users/logan/repos/flask-project/venv/bin/pip`
    ```
 
 2. Install dependencies:

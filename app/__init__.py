@@ -137,7 +137,6 @@ def ensure_schema():
     a membership for every user, and session hygiene. Idempotent throughout.
     """
     ensure_roles()
-    convert_local_timestamps_to_utc()
     purge_expired_sessions()
 
 
@@ -161,36 +160,6 @@ def ensure_roles():
     )
     for user in missing:
         RoleMembership.get_or_create(user=user, role=member)
-
-
-def convert_local_timestamps_to_utc():
-    """One-time rewrite of pre-UTC rows from server-local time to naive UTC.
-
-    Loan and chat timestamps used to be stored as naive `datetime.now()`, and
-    the old user_time filter read them back in the server's current zone. This
-    converts them with that same assumption, so every row keeps displaying the
-    instant it did before. PRAGMA user_version marks it done; in the container
-    (TZ=UTC) the rewrite is a no-op anyway.
-    """
-    from app.models import ChatMessage, Loan
-
-    if db.pragma("user_version") >= 1:
-        return
-
-    def to_utc(value):
-        if value is None:
-            return None
-        return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-
-    with db.atomic():
-        for loan in Loan.select():
-            loan.loaned_at = to_utc(loan.loaned_at)
-            loan.returned_at = to_utc(loan.returned_at)
-            loan.save(only=[Loan.loaned_at, Loan.returned_at])
-        for message in ChatMessage.select():
-            message.created_at = to_utc(message.created_at)
-            message.save(only=[ChatMessage.created_at])
-        db.pragma("user_version", 1)
 
 
 def purge_expired_sessions():
