@@ -6,11 +6,7 @@ from flask.sessions import SessionInterface, SessionMixin
 from werkzeug.datastructures import CallbackDict
 
 from app.models import Session as SessionModel
-
-
-def utcnow_naive():
-    """Naive UTC now, matching how expiry is stored in the session table."""
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+from app.models import utcnow_naive
 
 
 class ServerSideSession(CallbackDict, SessionMixin):

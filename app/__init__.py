@@ -61,8 +61,8 @@ def create_app():
     def user_time(value):
         """Render a DB timestamp in the viewer's timezone and clock format.
 
-        Loan timestamps are naive `datetime.now()` values — server-local, not
-        UTC — so they're localised to the server zone before being converted.
+        Stored timestamps are naive UTC (see models.utcnow_naive), so a naive
+        value is tagged UTC — never read as server-local — before converting.
         """
         if value is None:
             return "—"
@@ -70,7 +70,7 @@ def create_app():
         # before_request hook that sets g.user has run.
         user = getattr(g, "user", None)
         tz = ZoneInfo(user.timezone if user else "UTC")
-        aware = value.astimezone() if value.tzinfo is None else value
+        aware = value.replace(tzinfo=datetime.timezone.utc) if value.tzinfo is None else value
         if (user.time_format if user else "12") == "24":
             pattern = "%Y-%m-%d %H:%M"
         else:
@@ -170,7 +170,7 @@ def purge_expired_sessions():
     are browser-session leftovers from before logins were permanent; dropping
     them on restart matches how a browser-session cookie behaves anyway.
     """
-    from app.session import utcnow_naive
+    from app.models import utcnow_naive
 
     Session.delete().where(
         Session.expiry.is_null() | (Session.expiry < utcnow_naive())

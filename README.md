@@ -37,6 +37,7 @@ Requires Python 3.10+.
    ```bash
    python3 -m venv venv
    source venv/bin/activate   # on Windows: venv\Scripts\activate
+   which pip # should show something like `/Users/logan/repos/flask-project/venv/bin/pip`
    ```
 
 2. Install dependencies:
@@ -413,7 +414,7 @@ Response (`201 Created`):
     "quantity": 3,
     "copies_available": 2
   },
-  "loaned_at": "2026-07-08T12:00:00",
+  "loaned_at": "2026-07-08T12:00:00+00:00",
   "due_date": "2026-07-22",
   "returned": false,
   "returned_at": null

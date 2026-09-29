@@ -178,6 +178,10 @@
     td.numeric, th.numeric { text-align: right; }
     /* A book with every copy on loan: still listed, visibly unavailable. */
     tr.exhausted td { color: #9aa0aa; }
+    /* A row that navigates on click (books → that book's loans). */
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td, tr.clickable:focus-visible td { background: #f3f4f6; }
+    tr.clickable:focus-visible { outline: 2px solid #4f46e5; outline-offset: -2px; }
     a.action { color: #4f46e5; text-decoration: none; font-weight: 600; white-space: nowrap; }
     /* An <a> that reads as a button, for navigation that isn't a form submit. */
     a.btn-link {
