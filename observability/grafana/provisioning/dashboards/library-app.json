@@ -178,12 +178,132 @@
       ]
     },
     {
+      "id": 8,
+      "type": "table",
+      "title": "Hits by endpoint",
+      "description": "Server spans over the selected range, from Tempo span metrics (dimensions set in tempo.yaml). URL is the Flask route rule, not the raw path.",
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [{ "displayName": "Calls", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Calls" },
+            "properties": [{ "id": "unit", "value": "short" }, { "id": "decimals", "value": 0 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Avg Duration" },
+            "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 1 }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "calls",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+          "expr": "round(sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_calls_total{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range]))) > 0",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "avg",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+          "expr": "sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_latency_sum{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range])) / sum by (http_route, http_method, http_status_code, http_scheme) (increase(traces_spanmetrics_latency_count{service=\"flask-app\",span_kind=\"SPAN_KIND_SERVER\"}[$__range])) > 0",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "indexByName": {
+              "http_route": 0,
+              "http_method": 1,
+              "http_status_code": 2,
+              "http_scheme": 3,
+              "Value #calls": 4,
+              "Value #avg": 5
+            },
+            "renameByName": {
+              "http_route": "URL",
+              "http_method": "Method",
+              "http_status_code": "Status",
+              "http_scheme": "Scheme",
+              "Value #calls": "Calls",
+              "Value #avg": "Avg Duration"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Status codes",
+      "description": "Responses per status code, counted per bar interval (at least 1m, so each bucket spans several scrapes). Stacked, coloured by class.",
+      "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "interval": "1m",
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["sum"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "^2\\d\\d$" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "^3\\d\\d$" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "^4\\d\\d$" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "^5\\d\\d$" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
+          "expr": "round(sum by (status) (increase(flask_http_request_total{job=\"flask-app\"}[$__interval])))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
       "id": 6,
       "type": "timeseries",
       "title": "Span rate by name (from Tempo span metrics)",
       "description": "Generated by Tempo's metrics_generator and remote-written into Prometheus.",
       "datasource": { "type": "prometheus", "uid": "prometheus_ds" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
       "options": {
         "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
         "tooltip": { "mode": "multi", "sort": "desc" }
@@ -210,7 +330,7 @@
       "title": "Application logs",
       "description": "Selects on service_name, the compose service label. Docker's own container names carry a leading slash.",
       "datasource": { "type": "loki", "uid": "loki_ds" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
       "options": {
         "showTime": true,
         "showLabels": false,

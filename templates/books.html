@@ -19,13 +19,17 @@
             <th class="numeric">Available to loan</th>
             {% if current_user.is_admin %}
               <th></th>
-              <th></th>
             {% endif %}
           </tr>
         </thead>
         <tbody>
           {% for b in books %}
-            <tr{% if b.copies_available == 0 %} class="exhausted"{% endif %}>
+            {% if current_user.is_admin %}
+              <tr class="clickable{% if b.copies_available == 0 %} exhausted{% endif %}"
+                  data-href="{{ url_for('books.loans', book_id=b.id) }}" tabindex="0">
+            {% else %}
+              <tr{% if b.copies_available == 0 %} class="exhausted"{% endif %}>
+            {% endif %}
               <td>{{ b.title }}</td>
               <td>{{ b.author }}</td>
               <td>{{ b.isbn }}</td>
@@ -33,7 +37,6 @@
               <td class="numeric">{{ b.copies_out }}</td>
               <td class="numeric">{{ b.copies_available }}</td>
               {% if current_user.is_admin %}
-                <td><a class="action" href="{{ url_for('books.loans', book_id=b.id) }}">View loans →</a></td>
                 <td><a class="action" href="{{ url_for('books.edit', book_id=b.id) }}" title="Edit book" aria-label="Edit {{ b.title }}">✎</a></td>
               {% endif %}
             </tr>
@@ -44,4 +47,26 @@
       <p class="empty">No books yet — run <code>flask --app run init-db</code> to seed test data.</p>
     {% endif %}
   </div>
+  {# Admin rows open that book's loans. Links inside a row (edit) keep their
+     own behaviour; ctrl/cmd/middle-click opens a new tab like a real link. #}
+  <script>
+    (function () {
+      function open(row, newTab) {
+        if (newTab) window.open(row.dataset.href, '_blank');
+        else location.href = row.dataset.href;
+      }
+      document.querySelectorAll('tr[data-href]').forEach(function (row) {
+        row.addEventListener('click', function (e) {
+          if (e.target.closest('a, button')) return;
+          open(row, e.metaKey || e.ctrlKey);
+        });
+        row.addEventListener('auxclick', function (e) {
+          if (e.button === 1 && !e.target.closest('a, button')) open(row, true);
+        });
+        row.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && e.target === row) open(row, false);
+        });
+      });
+    })();
+  </script>
 {% endblock %}
