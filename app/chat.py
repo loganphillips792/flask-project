@@ -16,7 +16,7 @@ from flask_sock import Sock
 
 from app.auth import role_required
 from app.database import db
-from app.models import ChatMessage, User
+from app.models import ChatMessage, User, iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def ws_endpoint(ws):
                 {
                     "name": user.name,
                     "body": message.body,
-                    "created_at": message.created_at.isoformat(),
+                    "created_at": iso_utc(message.created_at),
                 }
             )
     finally:

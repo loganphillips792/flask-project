@@ -74,7 +74,7 @@
 
       function scrollToBottom() { log.scrollTop = log.scrollHeight; }
 
-      function addMessage(name, body) {
+      function addMessage(name, body, createdAt) {
         var empty = log.querySelector('.empty');
         if (empty) empty.remove();
         var msg = document.createElement('div');
@@ -86,11 +86,10 @@
         who.textContent = name;
         var when = document.createElement('span');
         when.className = 'when';
-        // Formatted at receipt time rather than parsed from the payload: the
-        // server sends a naive local timestamp Date() would misread across
-        // zones, and a live message is at most moments old anyway.
-        var now = new Date();
-        when.textContent = dateFmt.format(now) + ' ' + timeFmt.format(now);
+        // The server sends UTC with an explicit offset, so Date() parses the
+        // exact instant regardless of the browser's own zone.
+        var sent = new Date(createdAt);
+        when.textContent = dateFmt.format(sent) + ' ' + timeFmt.format(sent);
         meta.appendChild(who);
         meta.appendChild(when);
         var text = document.createElement('p');
@@ -111,7 +110,7 @@
         };
         socket.onmessage = function (event) {
           var data = JSON.parse(event.data);
-          addMessage(data.name, data.body);
+          addMessage(data.name, data.body, data.created_at);
         };
         socket.onclose = function (event) {
           if (event.code === 4403) {
